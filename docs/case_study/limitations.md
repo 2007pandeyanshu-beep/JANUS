@@ -34,6 +34,8 @@ JANUS maintains strict boundaries between raw observations and modeled likelihoo
 3. **Illustrative Priors:** Prior probabilities ($P(H_1)=0.50, P(H_2)=0.20, P(H_3)=0.30$) represent a researcher's epistemic state before executing the candidate experiments. They are interactive parameters, not physical constants.
 4. **Refusal to Fabricate Unquantified Assays:** In `EXP-WGS-05` (Operando Stopped-Flow Carboxyl Detection), steady-state $*COOH$ lifetimes are $<10\ \mu\text{s}$, below spectroscopic detection limits. JANUS explicitly marks this candidate as **`UNQUANTIFIED_NEEDS_MEASUREMENT`** and excludes it from EIG ranking to prevent algorithmic hallucination.
 
+Detailed item-by-item parameter classification (`LITERATURE_REPORTED`, `DERIVED`, `DOMAIN_ASSUMPTION`, `ILLUSTRATIVE`, `UNQUANTIFIED`): see [Scientific Assumptions Ledger](file:///C:/Users/2007p/OneDrive/Desktop/JANUS/docs/case_study/scientific_assumptions.md).
+
 ---
 
 ## 3. Dual Ranking Metrics: Raw EIG vs Composite Utility Optimization

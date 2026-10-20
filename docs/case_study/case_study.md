@@ -62,3 +62,10 @@ In Task 1, three candidate scientific case studies were investigated according t
    DOI: [10.1126/science.1150038](https://doi.org/10.1126/science.1150038)
 5. **C. M. Kalamaras, P. Panagiotopoulou, D. I. Kondarides, A. M. Efstathiou**, *Kinetic and SSITKA study of the water-gas shift reaction on Pt/TiO2 and Pt/CeO2 catalysts*, **Journal of Catalysis**, 264(2), 2009, 117–129.  
    DOI: [10.1016/j.jcat.2009.03.013](https://doi.org/10.1016/j.jcat.2009.03.013)
+
+---
+
+## 5. Traceability & Epistemological Boundaries
+
+* Detailed model parameter classifications (`LITERATURE_REPORTED`, `DERIVED`, `DOMAIN_ASSUMPTION`, `ILLUSTRATIVE`, `UNQUANTIFIED`): see [Scientific Assumptions Ledger](file:///C:/Users/2007p/OneDrive/Desktop/JANUS/docs/case_study/scientific_assumptions.md).
+* Statistical benchmark audit and dual ranking metrics: see [Case Study Limitations & Audit](file:///C:/Users/2007p/OneDrive/Desktop/JANUS/docs/case_study/limitations.md).

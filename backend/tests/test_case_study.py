@@ -108,3 +108,28 @@ def test_case_study_api_endpoints():
     assert bench_data["janus_policy"]["expected_information_gain"] > bench_data["exact_random_baseline"]["exact_mean_eig"]
     assert bench_data["comparison_summary"]["exact_eig_multiplier"] > 1.3
     assert bench_data["exact_random_baseline"]["exact_waste_rate"] == 0.20
+
+
+def test_scientific_assumptions_and_evaluation_plan_documents():
+    """Verifies existence and structural completeness of Phase 4 governance artifacts."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent.parent
+    assumptions_path = root / "docs" / "case_study" / "scientific_assumptions.md"
+    eval_plan_path = root / "docs" / "evaluation_plan.md"
+    
+    assert assumptions_path.exists(), "scientific_assumptions.md must exist in docs/case_study/"
+    assert eval_plan_path.exists(), "evaluation_plan.md must exist in docs/"
+    
+    assumptions_text = assumptions_path.read_text(encoding="utf-8")
+    for category in ["LITERATURE_REPORTED", "DERIVED", "DOMAIN_ASSUMPTION", "ILLUSTRATIVE", "UNQUANTIFIED"]:
+        assert category in assumptions_text, f"Missing category {category} in scientific_assumptions.md"
+        
+    for exp_id in ["EXP-WGS-01", "EXP-WGS-02", "EXP-WGS-03", "EXP-WGS-04", "EXP-WGS-05", "EXP-WGS-06"]:
+        assert exp_id in assumptions_text, f"Missing experiment {exp_id} in scientific_assumptions.md"
+        
+    eval_plan_text = eval_plan_path.read_text(encoding="utf-8")
+    for policy in ["B_RAND", "B_CHEAP", "B_FEAS", "B_RAWEIG", "PI_JANUS", "ORACLE"]:
+        assert policy in eval_plan_text, f"Missing policy {policy} in evaluation_plan.md"
+        
+    assert "Realized Information Gain" in eval_plan_text
+    assert "SYNTH-" in eval_plan_text
