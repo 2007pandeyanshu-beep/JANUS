@@ -145,6 +145,9 @@ def run_sequential_campaign(payload: BEDCampaignInput):
     try:
         if payload.custom_scenario:
             scenario = payload.custom_scenario
+        elif payload.scenario_id in ("SYNTH-A", "SYNTH-B", "SYNTH-C", "SYNTH-D", "SYNTH-E", "SYNTH-F"):
+            from scientific.synthetic_scenarios import get_synthetic_scenario
+            scenario = get_synthetic_scenario(payload.scenario_id, seed=payload.seed)
         elif payload.scenario_id == "demo":
             scenario = get_demo_scenario()
         else:
@@ -176,7 +179,10 @@ def compare_sequential_policies(
     Runs a matched-seed comparative evaluation of all 6 sequential experiment selection policies.
     """
     try:
-        if scenario_id == "demo":
+        if scenario_id in ("SYNTH-A", "SYNTH-B", "SYNTH-C", "SYNTH-D", "SYNTH-E", "SYNTH-F"):
+            from scientific.synthetic_scenarios import get_synthetic_scenario
+            scenario = get_synthetic_scenario(scenario_id, seed=seed)
+        elif scenario_id == "demo":
             scenario = get_demo_scenario()
         else:
             scenario = get_wgs_case_study_scenario()

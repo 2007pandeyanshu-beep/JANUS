@@ -291,4 +291,183 @@ def run_multiseed_sequential_evaluation(
             "mean_failures": round(float(np.mean(overall_by_policy[p]["failures"])), 2),
         }
         
+    # Compute paired statistical comparisons vs JANUS Composite Utility
+    janus_igs = overall_by_policy["janus_utility"]["ig"]
+    janus_costs = overall_by_policy["janus_utility"]["cost"]
+    paired_comparisons: Dict[str, Any] = {}
+    
+    for baseline in policies:
+        if baseline == "janus_utility":
+            continue
+        base_igs = overall_by_policy[baseline]["ig"]
+        base_costs = overall_by_policy[baseline]["cost"]
+        
+        ig_stats = compute_paired_statistics(janus_igs, base_igs)
+        cost_stats = compute_paired_statistics(janus_costs, base_costs)
+        
+        paired_comparisons[baseline] = {
+            "ig_difference": ig_stats,
+            "cost_difference": cost_stats,
+        }
+        
+    # Apply Holm-Bonferroni correction across the baseline comparisons
+    raw_p_values = {b: paired_comparisons[b]["ig_difference"]["raw_p_value"] for b in paired_comparisons}
+    sorted_baselines = sorted(raw_p_values.keys(), key=lambda k: raw_p_values[k])
+    m_tests = len(sorted_baselines)
+    running_max_p = 0.0
+    
+    for rank_idx, b in enumerate(sorted_baselines):
+        p_raw = raw_p_values[b]
+        adj_p = min(1.0, max(running_max_p, (m_tests - rank_idx) * p_raw))
+        running_max_p = adj_p
+        paired_comparisons[b]["ig_difference"]["adjusted_p_value"] = round(adj_p, 4)
+        
+        # Formulate statistically defensible conclusion
+        mean_diff = paired_comparisons[b]["ig_difference"]["mean_difference"]
+        if adj_p < 0.05:
+            if mean_diff > 0:
+                conclusion = f"Statistically significant advantage over {b} (p_adj={adj_p:.4f}, d={paired_comparisons[b]['ig_difference']['cohen_d']:.2f})."
+            else:
+                conclusion = f"Statistically significant underperformance vs {b} (p_adj={adj_p:.4f}, d={paired_comparisons[b]['ig_difference']['cohen_d']:.2f})."
+        else:
+            conclusion = f"No statistically significant difference vs {b} after multiple-testing correction (p_adj={adj_p:.4f})."
+        paired_comparisons[b]["statistical_verdict"] = conclusion
+        
+    audit_results["overall"]["paired_comparisons_vs_janus"] = paired_comparisons
     return audit_results
+
+
+def compute_paired_statistics(
+    x: List[float],
+    y: List[float],
+    n_boot: int = 5000,
+    n_perm: int = 5000,
+    seed: int = 42
+) -> Dict[str, Any]:
+    """
+    Computes rigorous paired statistical comparison metrics between two matched sequences:
+    - Mean paired difference (x - y)
+    - Sample standard deviation of differences
+    - 95% bootstrap confidence interval on mean paired difference
+    - Paired Cohen's d_z effect size
+    - Exact two-sided sign-flip permutation test p-value (non-parametric, sharp null)
+    """
+    diffs = np.array(x, dtype=np.float64) - np.array(y, dtype=np.float64)
+    n = len(diffs)
+    mean_d = float(np.mean(diffs))
+    std_d = float(np.std(diffs, ddof=1)) if n > 1 else 0.0
+    
+    # Bootstrap CI
+    rng = np.random.default_rng(seed)
+    boot_samples = rng.choice(diffs, size=(n_boot, n), replace=True)
+    boot_means = np.mean(boot_samples, axis=1)
+    ci_lower = float(np.percentile(boot_means, 2.5))
+    ci_upper = float(np.percentile(boot_means, 97.5))
+    
+    # Paired Cohen's d_z
+    cohen_d = float(mean_d / std_d) if std_d > 1e-12 else 0.0
+    
+    # Two-sided sign-flip permutation test
+    obs_t = abs(mean_d)
+    signs = rng.choice([-1.0, 1.0], size=(n_perm, n))
+    perm_means = np.abs(np.mean(signs * diffs, axis=1))
+    p_val = float(np.mean(perm_means >= obs_t))
+    p_val = max(p_val, 1.0 / n_perm)
+    
+    return {
+        "mean_difference": round(mean_d, 4),
+        "std_difference": round(std_d, 4),
+        "ci_95": (round(ci_lower, 4), round(ci_upper, 4)),
+        "cohen_d": round(cohen_d, 4),
+        "raw_p_value": round(p_val, 4)
+    }
+
+
+def run_synthetic_benchmark_suite(
+    scenario_keys: Optional[List[str]] = None,
+    n_seeds: int = 20,
+    budget: float = 10.0,
+    cost_weight: float = 0.1
+) -> Dict[str, Any]:
+    """
+    Executes comparative sequential BED benchmark campaigns across the synthetic scenario
+    suite (SYNTH-A through SYNTH-F) specified in evaluation_plan.md.
+    """
+    from scientific.synthetic_scenarios import SYNTHETIC_SCENARIO_GENERATORS, get_synthetic_scenario
+    
+    if scenario_keys is None:
+        scenario_keys = list(SYNTHETIC_SCENARIO_GENERATORS.keys())
+        
+    suite_results: Dict[str, Any] = {
+        "benchmark_id": f"SYNTH-SUITE-{uuid.uuid4().hex[:6].upper()}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "n_seeds_per_archetype": n_seeds,
+        "scenarios": {}
+    }
+    
+    for key in scenario_keys:
+        scenario = get_synthetic_scenario(key, seed=42)
+        hypo_ids = [h.id for h in scenario.hypotheses[:min(3, len(scenario.hypotheses))]]
+        seeds = list(range(1, n_seeds + 1))
+        
+        audit = run_multiseed_sequential_evaluation(
+            scenario=scenario,
+            hidden_hypotheses=hypo_ids,
+            seeds=seeds,
+            budget=budget,
+            cost_weight=cost_weight
+        )
+        suite_results["scenarios"][key] = {
+            "scenario_name": scenario.scenario_name,
+            "hypothesis_count": len(scenario.hypotheses),
+            "experiment_count": len(scenario.experiments),
+            "offline_upper_bound": audit["overall"]["offline_upper_bound"],
+            "policies": audit["overall"]["policies"],
+            "paired_comparisons_vs_janus": audit["overall"].get("paired_comparisons_vs_janus", {})
+        }
+        
+    return suite_results
+
+
+def run_objective_sensitivity_audit(
+    scenario: AnalysisInput,
+    alpha_weights: Optional[List[float]] = None,
+    seeds: Optional[List[int]] = None,
+    budget: float = 10.0
+) -> Dict[str, Any]:
+    """
+    Evaluates sensitivity of JANUS sequential design performance across varying cost penalty weights
+    alpha in U(e) = feasibility * EIG / (1 + alpha * cost).
+    """
+    if alpha_weights is None:
+        alpha_weights = [0.0, 0.05, 0.10, 0.25, 0.50, 1.0]
+    if seeds is None:
+        seeds = list(range(1, 21))
+        
+    hypo_ids = [h.id for h in scenario.hypotheses]
+    sensitivity: Dict[str, Any] = {
+        "scenario_name": scenario.scenario_name,
+        "alpha_evaluations": {}
+    }
+    
+    for alpha in alpha_weights:
+        audit = run_multiseed_sequential_evaluation(
+            scenario=scenario,
+            hidden_hypotheses=hypo_ids,
+            seeds=seeds,
+            budget=budget,
+            cost_weight=alpha
+        )
+        janus_stats = audit["overall"]["policies"]["janus_utility"]
+        sensitivity["alpha_evaluations"][f"alpha_{alpha}"] = {
+            "alpha": alpha,
+            "mean_ig": janus_stats["mean_ig"],
+            "std_ig": janus_stats["std_ig"],
+            "mean_cost": janus_stats["mean_cost"],
+            "mean_regret": janus_stats["mean_regret"],
+            "mean_zero_eig": janus_stats["mean_zero_eig"],
+            "mean_confidence": janus_stats["mean_conf"],
+            "ig_per_cost": round(janus_stats["mean_ig"] / max(janus_stats["mean_cost"], 0.1), 4)
+        }
+        
+    return sensitivity

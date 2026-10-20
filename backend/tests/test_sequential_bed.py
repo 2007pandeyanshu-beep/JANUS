@@ -425,3 +425,92 @@ def test_oracle_backward_compatibility_alias():
     assert res_oracle.total_steps == res_priv.total_steps
     assert res_oracle.total_cost == res_priv.total_cost
     assert res_oracle.total_realized_information_gain == res_priv.total_realized_information_gain
+
+
+def test_max_steps_stopping_condition():
+    """Confirms campaign halts with MAX_STEPS_REACHED when step limit is reached."""
+    scenario = get_wgs_case_study_scenario()
+    inp = BEDCampaignInput(
+        scenario_id="CS-CAT-001",
+        policy="janus_utility",
+        max_steps=2,
+        budget=50.0,
+        confidence_threshold=0.999
+    )
+    res = SequentialBEDEngine.run_campaign(scenario, inp)
+    assert res.termination_reason == "MAX_STEPS_REACHED"
+    assert res.total_steps == 2
+
+
+def test_no_candidates_remaining_stopping_condition():
+    """Confirms campaign halts with NO_CANDIDATES_REMAINING when pool is exhausted."""
+    from app.schemas.scientific import PredictedOutcome
+    h = [Hypothesis(id="H1", name="H1", description="H1", prior=0.5), Hypothesis(id="H2", name="H2", description="H2", prior=0.5)]
+    exps = [
+        Experiment(id="E1", name="E1", description="E1", possible_outcomes=["A", "B"], predictions=[
+            PredictedOutcome(hypothesis_id="H1", outcome_label="A", probability=0.6, derivation_mode="t"),
+            PredictedOutcome(hypothesis_id="H1", outcome_label="B", probability=0.4, derivation_mode="t"),
+            PredictedOutcome(hypothesis_id="H2", outcome_label="A", probability=0.4, derivation_mode="t"),
+            PredictedOutcome(hypothesis_id="H2", outcome_label="B", probability=0.6, derivation_mode="t"),
+        ], cost=1.0, feasibility=1.0, is_feasible=True),
+    ]
+    scen = AnalysisInput(scenario_name="SingleExpPool", hypotheses=h, experiments=exps)
+    inp = BEDCampaignInput(policy="janus_utility", max_steps=10, budget=50.0, confidence_threshold=0.999)
+    res = SequentialBEDEngine.run_campaign(scen, inp)
+    assert res.termination_reason == "NO_CANDIDATES_REMAINING"
+    assert res.total_steps == 1
+
+
+def test_no_informative_candidates_remaining_stopping_condition():
+    """Confirms campaign halts with NO_INFORMATIVE_CANDIDATES_REMAINING when pool has zero EIG."""
+    from app.schemas.scientific import PredictedOutcome
+    h = [Hypothesis(id="H1", name="H1", description="H1", prior=0.5), Hypothesis(id="H2", name="H2", description="H2", prior=0.5)]
+    e_uninf = Experiment(id="E-UNINF", name="E-UNINF", description="Uninf", possible_outcomes=["A", "B"], predictions=[
+        PredictedOutcome(hypothesis_id="H1", outcome_label="A", probability=0.5, derivation_mode="t"),
+        PredictedOutcome(hypothesis_id="H1", outcome_label="B", probability=0.5, derivation_mode="t"),
+        PredictedOutcome(hypothesis_id="H2", outcome_label="A", probability=0.5, derivation_mode="t"),
+        PredictedOutcome(hypothesis_id="H2", outcome_label="B", probability=0.5, derivation_mode="t"),
+    ], cost=1.0, feasibility=1.0, is_feasible=True)
+    scen = AnalysisInput(scenario_name="UninformativePool", hypotheses=h, experiments=[e_uninf])
+    inp = BEDCampaignInput(policy="janus_utility", max_steps=5, budget=10.0, confidence_threshold=0.95)
+    res = SequentialBEDEngine.run_campaign(scen, inp)
+    assert res.termination_reason == "NO_INFORMATIVE_CANDIDATES_REMAINING"
+    assert res.total_steps == 0
+
+
+def test_probability_bounds_and_simplex_normalization():
+    """Verifies that every sequential step maintains strict probability bounds in [0, 1] summing to 1.0."""
+    scenario = get_wgs_case_study_scenario()
+    inp = BEDCampaignInput(scenario_id="CS-CAT-001", policy="janus_utility", seed=42, budget=10.0, max_steps=5)
+    res = SequentialBEDEngine.run_campaign(scenario, inp)
+    
+    for step in res.steps:
+        for h_id, p in step.posterior_distribution.items():
+            assert 0.0 <= p <= 1.0, f"Probability bound violated: P({h_id}) = {p}"
+        assert sum(step.posterior_distribution.values()) == pytest.approx(1.0, abs=1e-4)
+
+
+def test_all_synthetic_scenarios_execute_cleanly():
+    """Verifies that all 6 synthetic scenario generators (SYNTH-A to SYNTH-F) run cleanly."""
+    from scientific.synthetic_scenarios import SYNTHETIC_SCENARIO_GENERATORS, get_synthetic_scenario
+    for key in SYNTHETIC_SCENARIO_GENERATORS:
+        scen = get_synthetic_scenario(key, seed=42)
+        res = SequentialBEDEngine.run_campaign(
+            scen,
+            BEDCampaignInput(scenario_id=key, policy="janus_utility", seed=42, budget=10.0, max_steps=3)
+        )
+        assert res.total_steps >= 0
+        assert res.total_cost <= 10.0 + 1e-6
+        assert 0.0 <= res.final_confidence_in_hidden_hypothesis <= 1.0
+
+
+def test_paired_statistics_bootstrap_and_permutation():
+    """Verifies mathematical properties of paired difference statistics and Holm-Bonferroni correction."""
+    from evaluation.sequential_evaluation import compute_paired_statistics
+    x = [1.5, 2.0, 1.8, 1.9, 2.1]
+    y = [1.0, 1.2, 1.1, 1.0, 1.3]
+    stats = compute_paired_statistics(x, y, n_boot=2000, n_perm=2000, seed=42)
+    assert stats["mean_difference"] > 0.0
+    assert stats["ci_95"][0] <= stats["mean_difference"] <= stats["ci_95"][1]
+    assert stats["cohen_d"] > 0.0
+    assert 0.0 <= stats["raw_p_value"] <= 1.0

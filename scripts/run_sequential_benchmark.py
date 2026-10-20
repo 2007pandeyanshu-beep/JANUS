@@ -25,6 +25,8 @@ from scientific.evidence_ingestion import get_wgs_case_study_scenario
 from evaluation.sequential_evaluation import (
     run_sequential_policy_comparison,
     run_multiseed_sequential_evaluation,
+    run_synthetic_benchmark_suite,
+    run_objective_sensitivity_audit,
 )
 
 
@@ -79,48 +81,22 @@ def main():
     print(f"\n[3] SCIENTIFIC SUMMARY & OBSERVATIONS (SEED 42):")
     print(f"  {report.summary_verdict}")
     
-    print(f"\n[4] MULTI-SEED & MULTI-HYPOTHESIS STATISTICAL AUDIT (20 Seeds x 3 Hypotheses):")
-    print("  Executing 60 matched campaigns across all candidate policies...")
+    print(f"\n[4] MULTI-SEED & MULTI-HYPOTHESIS STATISTICAL AUDIT (50 Seeds x 3 Hypotheses = 150 Matched Campaigns):")
+    print("  Executing 150 matched campaigns across all candidate policies on CS-CAT-001...")
     audit = run_multiseed_sequential_evaluation(
         scenario=scenario,
         hidden_hypotheses=["H1", "H2", "H3"],
-        seeds=list(range(1, 21)),
+        seeds=list(range(1, 51)),
         budget=budget,
         max_steps=max_steps,
         confidence_threshold=threshold
     )
     
-    for h_id in ["H1", "H2", "H3"]:
-        h_data = audit["per_hypothesis"][h_id]
-        off_mean = h_data["offline_upper_bound"]["mean_ig"]
-        off_std = h_data["offline_upper_bound"]["std_ig"]
-        print(f"\n  --- Ground Truth H* = {h_id} (Offline Upper Bound Mean IG: {off_mean:.4f} +/- {off_std:.4f} bits) ---")
-        sub_header = f"    {'Policy':<36} {'Mean IG (bits)':<18} {'Mean Regret':<14} {'Mean P(H*)':<12} {'Mean Cost':<11} {'Mean 0-EIG':<10}"
-        print(sub_header)
-        print("    " + "-" * 98)
-        for p_key, p_stats in h_data["policies"].items():
-            disp_name = next(p[1] for p in [
-                ("janus_utility", "JANUS Composite Utility"),
-                ("raw_eig", "Raw EIG Maximization"),
-                ("cheapest", "Naive Cheapest"),
-                ("feasibility", "Naive Feasibility"),
-                ("uniform_random", "Uniform Random"),
-                ("privileged_greedy", "Privileged Greedy (H*)"),
-            ] if p[0] == p_key)
-            line = (
-                f"    {disp_name:<36} {p_stats['mean_ig']:.4f} +/- {p_stats['std_ig']:.3f}   "
-                f"{p_stats['mean_regret']:.4f}        "
-                f"{p_stats['mean_conf']*100:>5.1f}%      "
-                f"{p_stats['mean_cost']:<11.1f} "
-                f"{p_stats['mean_zero_eig']:<10.2f}"
-            )
-            print(line)
-            
-    # Overall summary across all 60 runs
+    # Overall summary across all 150 runs
     overall = audit["overall"]
-    print(f"\n  --- Overall Across All 3 Hypotheses (60 Campaigns per Policy) ---")
     ov_off_mean = overall["offline_upper_bound"]["mean_ig"]
     ov_off_std = overall["offline_upper_bound"]["std_ig"]
+    print(f"\n  --- Overall Performance Across All 3 Hypotheses (150 Campaigns per Policy) ---")
     print(f"  Offline Upper Bound Across All Runs: {ov_off_mean:.4f} +/- {ov_off_std:.4f} bits")
     print(f"    {'Policy':<36} {'Mean IG (bits)':<18} {'Mean Regret':<14} {'Mean P(H*)':<12} {'Mean Cost':<11} {'Mean 0-EIG':<10}")
     print("    " + "-" * 98)
@@ -139,6 +115,72 @@ def main():
             f"{p_stats['mean_conf']*100:>5.1f}%      "
             f"{p_stats['mean_cost']:<11.1f} "
             f"{p_stats['mean_zero_eig']:<10.2f}"
+        )
+        print(line)
+        
+    print(f"\n[5] PAIRED STATISTICAL COMPARISONS VS. JANUS COMPOSITE UTILITY (N = 150 Paired Differences):")
+    print(f"    {'Baseline':<28} {'Delta IG (95% CI)':<26} {'Cohen d':<10} {'p (raw)':<10} {'p (Holm)':<10} {'Delta Cost':<12}")
+    print("    " + "-" * 98)
+    for b_key, comp in overall["paired_comparisons_vs_janus"].items():
+        ig = comp["ig_difference"]
+        cost = comp["cost_difference"]
+        ci_str = f"[{ig['ci_95'][0]:+.3f}, {ig['ci_95'][1]:+.3f}]"
+        disp_name = next(p[1] for p in [
+            ("raw_eig", "Raw EIG Maximization"),
+            ("cheapest", "Naive Cheapest"),
+            ("feasibility", "Naive Feasibility"),
+            ("uniform_random", "Uniform Random"),
+            ("privileged_greedy", "Privileged Greedy (H*)"),
+        ] if p[0] == b_key)
+        line = (
+            f"    {disp_name:<28} {ig['mean_difference']:+.4f} {ci_str:<18} "
+            f"{ig['cohen_d']:>+7.3f}   "
+            f"{ig['raw_p_value']:<10.4f} "
+            f"{ig['adjusted_p_value']:<10.4f} "
+            f"{cost['mean_difference']:>+6.2f}"
+        )
+        print(line)
+        print(f"      -> Verdict: {comp['statistical_verdict']}")
+        
+    print(f"\n[6] SYNTHETIC BENCHMARK SUITE EVALUATION (SYNTH-A THROUGH SYNTH-F):")
+    print("  Evaluating all 6 benchmark archetypes across 10 independent seeds per archetype...")
+    suite = run_synthetic_benchmark_suite(n_seeds=10, budget=budget)
+    
+    for s_key, s_data in suite["scenarios"].items():
+        off = s_data["offline_upper_bound"]
+        print(f"\n  === {s_key}: {s_data['scenario_name']} ===")
+        print(f"  Hypotheses: {s_data['hypothesis_count']}, Candidate Experiments: {s_data['experiment_count']}")
+        print(f"  Offline Upper Bound: {off['mean_ig']:.4f} +/- {off['std_ig']:.4f} bits")
+        print(f"    {'Policy':<36} {'Mean IG (bits)':<18} {'Mean Regret':<14} {'Mean Cost':<11} {'Mean 0-EIG':<10}")
+        print("    " + "-" * 88)
+        for p_key, p_stats in s_data["policies"].items():
+            disp_name = next(p[1] for p in [
+                ("janus_utility", "JANUS Composite Utility"),
+                ("raw_eig", "Raw EIG Maximization"),
+                ("cheapest", "Naive Cheapest"),
+                ("feasibility", "Naive Feasibility"),
+                ("uniform_random", "Uniform Random"),
+                ("privileged_greedy", "Privileged Greedy (H*)"),
+            ] if p[0] == p_key)
+            line = (
+                f"    {disp_name:<36} {p_stats['mean_ig']:.4f} +/- {p_stats['std_ig']:.3f}   "
+                f"{p_stats['mean_regret']:.4f}        "
+                f"{p_stats['mean_cost']:<11.1f} "
+                f"{p_stats['mean_zero_eig']:<10.2f}"
+            )
+            print(line)
+            
+    print(f"\n[7] COST-PENALTY SENSITIVITY AUDIT (Alpha in [0.0, 1.0] on CS-CAT-001):")
+    sensitivity = run_objective_sensitivity_audit(scenario=scenario, seeds=list(range(1, 21)))
+    print(f"    {'Alpha Weight':<18} {'Mean IG':<12} {'Mean Cost':<12} {'IG / Cost Efficiency':<22} {'Mean Conf(H*)':<15}")
+    print("    " + "-" * 78)
+    for a_key, a_data in sensitivity["alpha_evaluations"].items():
+        line = (
+            f"    alpha = {a_data['alpha']:<10.2f} "
+            f"{a_data['mean_ig']:<12.4f} "
+            f"{a_data['mean_cost']:<12.2f} "
+            f"{a_data['ig_per_cost']:<22.4f} "
+            f"{a_data['mean_confidence']*100:>5.1f}%"
         )
         print(line)
         

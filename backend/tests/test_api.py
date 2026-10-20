@@ -99,3 +99,19 @@ def test_sequential_compare_endpoint():
     assert data["comparison_id"].startswith("SEQ-BENCH-")
     assert len(data["policy_summaries"]) == 6
     assert "summary_verdict" in data
+
+
+def test_sequential_synthetic_scenario_api():
+    """Confirms API supports synthetic scenario keys (e.g. SYNTH-A, SYNTH-B)."""
+    payload = {
+        "scenario_id": "SYNTH-A",
+        "policy": "janus_utility",
+        "seed": 42,
+        "budget": 10.0,
+        "max_steps": 3
+    }
+    response = client.post("/api/sequential/run", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "SYNTH-A" in data["scenario_name"]
+    assert data["total_steps"] >= 1
