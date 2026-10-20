@@ -4,8 +4,16 @@ import {
   fetchDemoScenario,
   fetchCaseStudyScenario,
   runAnalysis,
+  runSequentialCampaign,
+  compareSequentialPolicies,
 } from './api';
-import { AnalysisInput, AnalysisResult, ExperimentScore } from './types';
+import {
+  AnalysisInput,
+  AnalysisResult,
+  ExperimentScore,
+  BEDCampaignResult,
+  BEDPolicyComparisonReport,
+} from './types';
 
 export const App: React.FC = () => {
   const [health, setHealth] = useState<{
@@ -20,9 +28,21 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [running, setRunning] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'hypotheses' | 'experiments' | 'evidence' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'hypotheses' | 'experiments' | 'evidence' | 'audit' | 'sequential'>('overview');
   const [selectedExpId, setSelectedExpId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<'case_study' | 'synthetic'>('case_study');
+
+  // Sequential BED Campaign State
+  const [bedPolicy, setBedPolicy] = useState<string>('janus_utility');
+  const [bedHiddenHypothesisId, setBedHiddenHypothesisId] = useState<string>('H1');
+  const [bedSeed, setBedSeed] = useState<number>(42);
+  const [bedBudget, setBedBudget] = useState<number>(10.0);
+  const [bedMaxSteps, setBedMaxSteps] = useState<number>(6);
+  const [bedConfidence, setBedConfidence] = useState<number>(0.95);
+  const [bedRunning, setBedRunning] = useState<boolean>(false);
+  const [bedResult, setBedResult] = useState<BEDCampaignResult | null>(null);
+  const [bedCompareResult, setBedCompareResult] = useState<BEDPolicyComparisonReport | null>(null);
+  const [bedCompareRunning, setBedCompareRunning] = useState<boolean>(false);
 
   // Load published case study as default primary scientific scenario
   useEffect(() => {
@@ -95,6 +115,47 @@ export const App: React.FC = () => {
       h.id === hypothesisId ? { ...h, prior: Math.max(0.01, Math.min(1.0, newPrior)) } : h
     );
     setCurrentScenario({ ...currentScenario, hypotheses: updatedHypotheses });
+  };
+
+  const handleRunSequential = async () => {
+    try {
+      setBedRunning(true);
+      setError(null);
+      const res = await runSequentialCampaign({
+        scenario_id: selectedMode === 'case_study' ? 'CS-CAT-001' : 'demo',
+        policy: bedPolicy,
+        hidden_hypothesis_id: bedHiddenHypothesisId,
+        seed: bedSeed,
+        budget: bedBudget,
+        max_steps: bedMaxSteps,
+        confidence_threshold: bedConfidence,
+      });
+      setBedResult(res);
+    } catch (err: any) {
+      setError(err.message || 'Sequential campaign failed.');
+    } finally {
+      setBedRunning(false);
+    }
+  };
+
+  const handleComparePolicies = async () => {
+    try {
+      setBedCompareRunning(true);
+      setError(null);
+      const res = await compareSequentialPolicies(
+        selectedMode === 'case_study' ? 'CS-CAT-001' : 'demo',
+        bedHiddenHypothesisId,
+        bedSeed,
+        bedBudget,
+        bedMaxSteps,
+        bedConfidence
+      );
+      setBedCompareResult(res);
+    } catch (err: any) {
+      setError(err.message || 'Policy comparison failed.');
+    } finally {
+      setBedCompareRunning(false);
+    }
   };
 
   if (loading) {
@@ -232,6 +293,12 @@ export const App: React.FC = () => {
           onClick={() => setActiveTab('audit')}
         >
           5. Mathematical Audit Trail
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'sequential' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sequential')}
+        >
+          6. Sequential BED Campaign ⚡
         </button>
       </nav>
 
@@ -794,6 +861,345 @@ export const App: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 6: SEQUENTIAL BAYESIAN EXPERIMENTAL DESIGN (BED) CAMPAIGN */}
+      {activeTab === 'sequential' && (
+        <div>
+          {/* Simulation Header & Configuration Card */}
+          <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid var(--brand-primary)' }}>
+            <div className="card-header">
+              <div>
+                <h3 className="card-title">Closed-Loop Sequential Bayesian Experimental Design (BED)</h3>
+                <p className="card-subtitle">
+                  Autonomous multi-step discovery simulation with strict Nature vs. Policy isolation
+                </p>
+              </div>
+              <span className="badge badge-indigo">CLOSED-LOOP BED ACTIVE</span>
+            </div>
+
+            <div className="card-body">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Decision Policy
+                  </label>
+                  <select 
+                    value={bedPolicy} 
+                    onChange={e => setBedPolicy(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontSize: '0.85rem' }}
+                  >
+                    <option value="janus_utility">JANUS Composite Utility (Default)</option>
+                    <option value="raw_eig">Raw EIG Maximization (Ablation)</option>
+                    <option value="cheapest">Naive Cost-Minimization</option>
+                    <option value="feasibility">Naive Feasibility-Maximization</option>
+                    <option value="uniform_random">Uniform Random Baseline</option>
+                    <option value="oracle">Idealized Omniscient Oracle</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Simulated Nature Truth (H*)
+                  </label>
+                  <select 
+                    value={bedHiddenHypothesisId} 
+                    onChange={e => setBedHiddenHypothesisId(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontSize: '0.85rem' }}
+                  >
+                    {currentScenario?.hypotheses.map(h => (
+                      <option key={h.id} value={h.id}>
+                        {h.id}: {h.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Random Seed
+                  </label>
+                  <input 
+                    type="number" 
+                    value={bedSeed} 
+                    onChange={e => setBedSeed(parseInt(e.target.value) || 0)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Budget Limit
+                  </label>
+                  <input 
+                    type="number" 
+                    step="0.5" 
+                    value={bedBudget} 
+                    onChange={e => setBedBudget(parseFloat(e.target.value) || 1.0)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Max Steps
+                  </label>
+                  <input 
+                    type="number" 
+                    value={bedMaxSteps} 
+                    onChange={e => setBedMaxSteps(parseInt(e.target.value) || 1)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Confidence Target
+                  </label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0.5" 
+                    max="0.99" 
+                    value={bedConfidence} 
+                    onChange={e => setBedConfidence(parseFloat(e.target.value) || 0.95)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <button 
+                  className="btn-primary" 
+                  onClick={handleRunSequential}
+                  disabled={bedRunning || bedCompareRunning}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {bedRunning ? 'Running Campaign...' : '▶ Run Sequential Campaign'}
+                </button>
+                <button 
+                  className="btn-secondary" 
+                  onClick={handleComparePolicies}
+                  disabled={bedRunning || bedCompareRunning}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {bedCompareRunning ? 'Comparing Policies...' : '⚖ Compare All 6 Policies'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Simulation Integrity Disclaimer */}
+          <div className="alert-box alert-blue" style={{ marginBottom: '24px', fontSize: '0.82rem' }}>
+            <div>
+              <strong>Simulation Integrity Guarantee:</strong> In this closed-loop demonstration, Nature operates as an isolated simulation environment holding the hidden physical truth <code>{bedHiddenHypothesisId}</code>.
+              The decision policy receives zero direct information about Nature's truth during candidate ranking and Bayesian updates. All experimental outcomes are simulated from declared likelihood distributions.
+            </div>
+          </div>
+
+          {/* Single Campaign Result View */}
+          {bedResult && (
+            <div style={{ marginBottom: '32px' }}>
+              <div className="card" style={{ marginBottom: '20px' }}>
+                <div className="card-header">
+                  <div>
+                    <h3 className="card-title">Campaign Execution Summary: {bedResult.policy_name}</h3>
+                    <p className="card-subtitle">Termination: <strong style={{ color: bedResult.target_confidence_achieved ? '#059669' : '#d97706' }}>{bedResult.termination_reason}</strong></p>
+                  </div>
+                  <span className={`badge ${bedResult.target_confidence_achieved ? 'badge-emerald' : 'badge-amber'}`}>
+                    {bedResult.target_confidence_achieved ? 'TARGET CONFIDENCE ACHIEVED' : 'CAMPAIGN CONCLUDED'}
+                  </span>
+                </div>
+
+                <div className="card-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', background: 'var(--bg-surface-alt)', padding: '14px', borderRadius: '8px' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Final Confidence P(H*)</span>
+                      <p className="metric-highlight" style={{ fontSize: '1.25rem', color: bedResult.final_confidence_in_hidden_hypothesis >= bedConfidence ? '#059669' : '#4338ca' }}>
+                        {(bedResult.final_confidence_in_hidden_hypothesis * 100).toFixed(1)}%
+                      </p>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Target: {(bedResult.confidence_threshold * 100).toFixed(0)}%</span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Total Steps / Cost</span>
+                      <p className="metric-highlight" style={{ fontSize: '1.25rem' }}>
+                        {bedResult.total_steps} steps / {bedResult.total_cost.toFixed(1)}
+                      </p>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Budget Limit: {bedResult.budget.toFixed(1)}</span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Realized Info Gain</span>
+                      <p className="metric-highlight green" style={{ fontSize: '1.25rem' }}>
+                        +{bedResult.total_realized_information_gain.toFixed(4)} bits
+                      </p>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Actual Shannon entropy reduction</span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Friction Tracking</span>
+                      <p className="metric-highlight" style={{ fontSize: '1.25rem', color: bedResult.execution_failure_count > 0 ? '#e11d48' : '#059669' }}>
+                        {bedResult.execution_failure_count} fails / {bedResult.uninformative_selection_count} waste
+                      </p>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Feasibility aborts / 0-EIG picks</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step-by-Step Campaign Timeline */}
+              <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '14px', color: 'var(--text-main)' }}>
+                Step-by-Step Campaign Decision Timeline
+              </h4>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {bedResult.steps.map(step => (
+                  <div key={step.step_number} className="card" style={{ padding: '16px', borderLeft: step.simulated_is_successful ? '4px solid #059669' : '4px solid #e11d48' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span className="rank-pill" style={{ background: '#4338ca', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>
+                          STEP #{step.step_number}
+                        </span>
+                        <div>
+                          <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)' }}>{step.selected_experiment_name}</strong>
+                          <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginLeft: '8px' }}>({step.selected_experiment_id})</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {step.simulated_is_successful ? (
+                          <span className="badge badge-emerald">EXECUTION SUCCESS</span>
+                        ) : (
+                          <span className="badge badge-rose">FEASIBILITY FAILURE (ABORTED)</span>
+                        )}
+                        <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cost: {step.step_cost.toFixed(1)} (Cum: {step.cumulative_cost.toFixed(1)})</span>
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px', background: 'var(--bg-surface-alt)', padding: '8px 12px', borderRadius: '6px' }}>
+                      <strong>Selection Rationale:</strong> {step.selection_rationale}
+                    </p>
+
+                    {step.simulated_is_successful && step.observed_outcome && (
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
+                        <span className="badge badge-indigo">SIMULATED OUTCOME</span>
+                        <strong className="mono" style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>{step.observed_outcome}</strong>
+                        <span style={{ fontSize: '0.8rem', color: '#059669', marginLeft: 'auto', fontWeight: 600 }}>
+                          Realized IG: +{step.realized_information_gain.toFixed(4)} bits (Predicted: {step.predicted_eig.toFixed(4)})
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Posterior Distribution Bars */}
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
+                        Bayesian Posterior Distribution After Step #{step.step_number}:
+                      </span>
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {Object.entries(step.posterior_distribution).map(([hId, prob]) => {
+                          const isHStar = hId === bedResult.hidden_hypothesis_id;
+                          const isHigh = prob > 0.7;
+                          return (
+                            <div key={hId} style={{ background: 'var(--bg-surface-alt)', padding: '6px 10px', borderRadius: '6px', minWidth: '120px', border: isHStar ? '1px solid #4338ca' : '1px solid var(--border-subtle)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '2px' }}>
+                                <strong>{hId} {isHStar ? '★ (H*)' : ''}</strong>
+                                <span className="mono" style={{ fontWeight: isHigh ? 700 : 400, color: isHigh ? '#059669' : undefined }}>
+                                  {(prob * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{ width: `${prob * 100}%`, height: '100%', background: isHStar ? '#4338ca' : '#94a3b8' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comparative Evaluation View Across All 6 Policies */}
+          {bedCompareResult && (
+            <div className="card" style={{ marginTop: '24px' }}>
+              <div className="card-header">
+                <div>
+                  <h3 className="card-title">Multi-Policy Benchmark Comparison</h3>
+                  <p className="card-subtitle">
+                    Matched-seed comparative evaluation under simulated truth H*='{bedCompareResult.hidden_hypothesis_id}' (Budget={bedCompareResult.budget.toFixed(1)}, Target={(bedCompareResult.confidence_threshold * 100).toFixed(0)}%)
+                  </p>
+                </div>
+                <span className="badge badge-emerald">6 POLICIES EVALUATED</span>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Policy</th>
+                      <th>Final P(H*)</th>
+                      <th>Steps</th>
+                      <th>Total Cost</th>
+                      <th>Realized IG</th>
+                      <th>Failures</th>
+                      <th>0-EIG Picks</th>
+                      <th>Target Met?</th>
+                      <th>Regret vs Oracle</th>
+                      <th>Runtime</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bedCompareResult.policy_summaries.map(s => {
+                      const isTopPolicy = s.policy_key === 'janus_utility';
+                      return (
+                        <tr key={s.policy_key} style={{ backgroundColor: isTopPolicy ? '#f0fdf4' : undefined, fontWeight: isTopPolicy ? 600 : 400 }}>
+                          <td>
+                            <strong>{s.policy_name}</strong>
+                            {isTopPolicy && <span className="badge badge-emerald" style={{ marginLeft: '6px', fontSize: '0.65rem' }}>PROPOSED</span>}
+                          </td>
+                          <td>
+                            <span className="metric-highlight" style={{ color: s.final_confidence_h_star >= bedConfidence ? '#059669' : undefined }}>
+                              {(s.final_confidence_h_star * 100).toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="mono">{s.total_steps}</td>
+                          <td className="mono">{s.total_cost.toFixed(1)}</td>
+                          <td className="mono">+{s.total_realized_ig_bits.toFixed(4)} bits</td>
+                          <td>
+                            <span className={`badge ${s.execution_failures > 0 ? 'badge-rose' : 'badge-slate'}`}>
+                              {s.execution_failures}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${s.zero_eig_selections > 0 ? 'badge-amber' : 'badge-slate'}`}>
+                              {s.zero_eig_selections}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${s.target_confidence_achieved ? 'badge-emerald' : 'badge-slate'}`}>
+                              {s.target_confidence_achieved ? 'YES' : 'NO'}
+                            </span>
+                          </td>
+                          <td className="mono">{s.regret_vs_oracle_utility.toFixed(4)}</td>
+                          <td className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{s.runtime_ms.toFixed(1)} ms</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="card-body">
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'var(--bg-surface-alt)', padding: '12px', borderRadius: '6px' }}>
+                  <strong>Scientific Benchmark Verdict:</strong> {bedCompareResult.summary_verdict}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

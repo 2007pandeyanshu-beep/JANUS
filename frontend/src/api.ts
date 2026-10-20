@@ -1,4 +1,12 @@
-import { AnalysisInput, AnalysisResult, Evidence, Experiment } from './types';
+import {
+  AnalysisInput,
+  AnalysisResult,
+  Evidence,
+  Experiment,
+  BEDCampaignInput,
+  BEDCampaignResult,
+  BEDPolicyComparisonReport,
+} from './types';
 
 const API_BASE = '/api';
 
@@ -59,6 +67,45 @@ export async function runAnalysis(payload: AnalysisInput): Promise<AnalysisResul
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(errorData.detail || `Analysis execution failed with HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function runSequentialCampaign(input: BEDCampaignInput): Promise<BEDCampaignResult> {
+  const res = await fetch(`${API_BASE}/sequential/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Sequential campaign failed with HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function compareSequentialPolicies(
+  scenarioId: string = 'CS-CAT-001',
+  hiddenHypothesisId: string = 'H1',
+  seed: number = 42,
+  budget: number = 10.0,
+  maxSteps: number = 8,
+  confidenceThreshold: number = 0.95
+): Promise<BEDPolicyComparisonReport> {
+  const url = `${API_BASE}/sequential/compare?scenario_id=${encodeURIComponent(scenarioId)}&hidden_hypothesis_id=${encodeURIComponent(hiddenHypothesisId)}&seed=${seed}&budget=${budget}&max_steps=${maxSteps}&confidence_threshold=${confidenceThreshold}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Policy comparison failed with HTTP ${res.status}`);
   }
   return res.json();
 }

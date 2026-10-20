@@ -232,3 +232,117 @@ class AnalysisResult(BaseModel):
         default="VALIDATED_DETERMINISTIC",
         description="Status flag indicating mathematical and schema verification"
     )
+
+
+# ==============================================================================
+# Sequential Bayesian Experimental Design (BED) Schemas (Phase 5)
+# ==============================================================================
+
+class BEDCampaignStep(BaseModel):
+    """A single sequential decision, execution, and Bayesian update step in a BED campaign."""
+    step_number: int = Field(..., description="1-indexed sequential step number")
+    selected_experiment_id: str
+    selected_experiment_name: str
+    execution_status: str = Field(..., description="'SUCCESS' or 'EXECUTION_FAILURE'")
+    observed_outcome: Optional[str] = Field(default=None, description="Observed categorical outcome label if successful")
+    simulated_is_successful: bool = Field(..., description="True if feasibility check succeeded")
+    
+    # Bayesian distribution states
+    prior_distribution: Dict[str, float] = Field(..., description="P(H_k) immediately before this step")
+    posterior_distribution: Dict[str, float] = Field(..., description="P(H_k | y) immediately after this step")
+    
+    # Information & Cost metrics
+    predicted_eig: float = Field(..., description="Expected Information Gain in bits calculated prior to execution")
+    realized_information_gain: float = Field(..., description="Actual Shannon entropy reduction H(prior) - H(posterior) in bits")
+    step_cost: float
+    cumulative_cost: float
+    
+    # State of remaining pool
+    remaining_candidate_count: int
+    remaining_candidate_scores: List[ExperimentScore] = Field(
+        default_factory=list,
+        description="Top re-ranked candidate scores under updated posterior"
+    )
+    selection_rationale: str
+
+
+class BEDCampaignResult(BaseModel):
+    """Complete reproducible record of a Sequential Bayesian Experimental Design campaign."""
+    campaign_id: str
+    timestamp: str
+    scenario_name: str
+    policy_name: str
+    hidden_hypothesis_id: str = Field(..., description="Designated true hypothesis in simulation environment")
+    hidden_hypothesis_name: str
+    seed: int
+    budget: float
+    max_steps: int
+    confidence_threshold: float
+    
+    # Outcome states
+    initial_priors: Dict[str, float]
+    final_posterior: Dict[str, float]
+    final_confidence_in_hidden_hypothesis: float = Field(..., description="P(H* | observed evidence)")
+    
+    # Campaign progression
+    steps: List[BEDCampaignStep]
+    total_steps: int
+    total_cost: float
+    total_realized_information_gain: float = Field(..., description="Cumulative entropy reduction in bits")
+    
+    # Termination
+    termination_reason: str = Field(
+        ...,
+        description="'TARGET_CONFIDENCE_ACHIEVED', 'BUDGET_EXHAUSTED', 'MAX_STEPS_REACHED', 'NO_CANDIDATES_REMAINING', or 'NO_INFORMATIVE_CANDIDATES_REMAINING'"
+    )
+    target_confidence_achieved: bool
+    execution_failure_count: int
+    uninformative_selection_count: int
+    warnings: List[str] = Field(default_factory=list)
+
+
+class BEDCampaignInput(BaseModel):
+    """Input payload to start a sequential BED campaign."""
+    scenario_id: Optional[str] = Field(default="CS-CAT-001", description="'CS-CAT-001' or 'demo'")
+    custom_scenario: Optional[AnalysisInput] = Field(default=None, description="Optional custom AnalysisInput payload")
+    policy: str = Field(
+        default="janus_utility",
+        description="'janus_utility', 'raw_eig', 'cheapest', 'feasibility', 'uniform_random', or 'oracle'"
+    )
+    hidden_hypothesis_id: Optional[str] = Field(
+        default=None,
+        description="Specific hidden hypothesis H*; if None, defaulted to H1"
+    )
+    seed: int = Field(default=42, ge=0, description="Random seed for simulation reproducibility")
+    budget: float = Field(default=10.0, gt=0.0, description="Maximum total campaign cost budget")
+    max_steps: int = Field(default=8, ge=1, le=50, description="Maximum sequential intervention steps")
+    confidence_threshold: float = Field(default=0.95, gt=0.5, le=0.999, description="Target posterior confidence P(H_k) >= threshold")
+    cost_weight: float = Field(default=0.1, ge=0.0, description="Cost penalization weight alpha for composite utility")
+
+
+class PolicyCampaignSummary(BaseModel):
+    policy_key: str
+    policy_name: str
+    final_confidence_h_star: float
+    total_steps: int
+    total_cost: float
+    total_realized_ig_bits: float
+    execution_failures: int
+    zero_eig_selections: int
+    target_confidence_achieved: bool
+    termination_reason: str
+    runtime_ms: float
+    regret_vs_oracle_utility: float
+
+
+class BEDPolicyComparisonReport(BaseModel):
+    comparison_id: str
+    timestamp: str
+    scenario_name: str
+    hidden_hypothesis_id: str
+    hidden_hypothesis_name: str
+    seed: int
+    budget: float
+    confidence_threshold: float
+    policy_summaries: List[PolicyCampaignSummary]
+    summary_verdict: str

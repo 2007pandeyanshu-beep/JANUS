@@ -10,8 +10,17 @@ Provides REST endpoints for:
 
 from typing import List
 from fastapi import APIRouter, HTTPException, status
-from app.schemas.scientific import AnalysisInput, AnalysisResult, Evidence, Experiment
+from app.schemas.scientific import (
+    AnalysisInput,
+    AnalysisResult,
+    Evidence,
+    Experiment,
+    BEDCampaignInput,
+    BEDCampaignResult,
+    BEDPolicyComparisonReport,
+)
 from scientific.engine import ScientificEngine
+from scientific.sequential_engine import SequentialBEDEngine
 from scientific.scenarios import get_demo_scenario
 from scientific.evidence_ingestion import (
     get_wgs_case_study_scenario,
@@ -20,6 +29,7 @@ from scientific.evidence_ingestion import (
 )
 from scientific.validation import ScientificValidationError
 from evaluation.benchmark_evaluation import run_reproducible_benchmark, BenchmarkEvaluationReport
+from evaluation.sequential_evaluation import run_sequential_policy_comparison
 
 router = APIRouter(prefix="/api", tags=["Scientific Intelligence"])
 
@@ -123,4 +133,64 @@ def run_analysis(payload: AnalysisInput):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis Execution Failed: {str(e)}"
+        )
+
+
+@router.post("/sequential/run", response_model=BEDCampaignResult)
+def run_sequential_campaign(payload: BEDCampaignInput):
+    """
+    Executes a multi-step closed-loop Sequential Bayesian Experimental Design (BED) campaign.
+    Simulates Nature's hidden hypothesis and physical feasibility while isolating the policy.
+    """
+    try:
+        if payload.custom_scenario:
+            scenario = payload.custom_scenario
+        elif payload.scenario_id == "demo":
+            scenario = get_demo_scenario()
+        else:
+            scenario = get_wgs_case_study_scenario()
+            
+        return SequentialBEDEngine.run_campaign(scenario, payload)
+    except ScientificValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Scientific Validation Error: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Sequential BED Campaign Failed: {str(e)}"
+        )
+
+
+@router.post("/sequential/compare", response_model=BEDPolicyComparisonReport)
+def compare_sequential_policies(
+    scenario_id: str = "CS-CAT-001",
+    hidden_hypothesis_id: str = "H1",
+    seed: int = 42,
+    budget: float = 10.0,
+    max_steps: int = 8,
+    confidence_threshold: float = 0.95
+):
+    """
+    Runs a matched-seed comparative evaluation of all 6 sequential experiment selection policies.
+    """
+    try:
+        if scenario_id == "demo":
+            scenario = get_demo_scenario()
+        else:
+            scenario = get_wgs_case_study_scenario()
+            
+        return run_sequential_policy_comparison(
+            scenario=scenario,
+            hidden_hypothesis_id=hidden_hypothesis_id,
+            seed=seed,
+            budget=budget,
+            max_steps=max_steps,
+            confidence_threshold=confidence_threshold
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Policy Comparison Failed: {str(e)}"
         )

@@ -110,3 +110,85 @@ export interface AnalysisResult {
   warnings: string[];
   validation_status: string;
 }
+
+export interface BEDCampaignStep {
+  step_number: number;
+  selected_experiment_id: string;
+  selected_experiment_name: string;
+  execution_status: 'SUCCESS' | 'EXECUTION_FAILURE';
+  observed_outcome?: string | null;
+  simulated_is_successful: boolean;
+  prior_distribution: Record<string, number>;
+  posterior_distribution: Record<string, number>;
+  predicted_eig: number;
+  realized_information_gain: number;
+  step_cost: number;
+  cumulative_cost: number;
+  remaining_candidate_count: number;
+  remaining_candidate_scores: ExperimentScore[];
+  selection_rationale: string;
+}
+
+export interface BEDCampaignResult {
+  campaign_id: string;
+  timestamp: string;
+  scenario_name: string;
+  policy_name: string;
+  hidden_hypothesis_id: string;
+  hidden_hypothesis_name: string;
+  seed: number;
+  budget: number;
+  max_steps: number;
+  confidence_threshold: number;
+  initial_priors: Record<string, number>;
+  final_posterior: Record<string, number>;
+  final_confidence_in_hidden_hypothesis: number;
+  steps: BEDCampaignStep[];
+  total_steps: number;
+  total_cost: number;
+  total_realized_information_gain: number;
+  termination_reason: string;
+  target_confidence_achieved: boolean;
+  execution_failure_count: number;
+  uninformative_selection_count: number;
+  warnings: string[];
+}
+
+export interface BEDCampaignInput {
+  scenario_id?: string;
+  policy: string;
+  hidden_hypothesis_id?: string | null;
+  seed: number;
+  budget: number;
+  max_steps: number;
+  confidence_threshold: number;
+  cost_weight?: number;
+}
+
+export interface PolicyCampaignSummary {
+  policy_key: string;
+  policy_name: string;
+  final_confidence_h_star: number;
+  total_steps: number;
+  total_cost: number;
+  total_realized_ig_bits: number;
+  execution_failures: number;
+  zero_eig_selections: number;
+  target_confidence_achieved: boolean;
+  termination_reason: string;
+  runtime_ms: number;
+  regret_vs_oracle_utility: number;
+}
+
+export interface BEDPolicyComparisonReport {
+  comparison_id: string;
+  timestamp: string;
+  scenario_name: string;
+  hidden_hypothesis_id: string;
+  hidden_hypothesis_name: string;
+  seed: number;
+  budget: number;
+  confidence_threshold: number;
+  policy_summaries: PolicyCampaignSummary[];
+  summary_verdict: string;
+}

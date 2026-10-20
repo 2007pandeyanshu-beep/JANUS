@@ -69,3 +69,33 @@ def test_run_analysis_validation_failure():
     response = client.post("/api/analysis/run", json=payload)
     # Pydantic schema validation should reject min_length < 2
     assert response.status_code in (422, 400)
+
+
+def test_sequential_run_endpoint():
+    payload = {
+        "scenario_id": "CS-CAT-001",
+        "policy": "janus_utility",
+        "hidden_hypothesis_id": "H1",
+        "seed": 42,
+        "budget": 10.0,
+        "max_steps": 3,
+        "confidence_threshold": 0.95
+    }
+    response = client.post("/api/sequential/run", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["policy_name"] == "janus_utility"
+    assert data["hidden_hypothesis_id"] == "H1"
+    assert data["total_steps"] >= 1
+    assert len(data["steps"]) == data["total_steps"]
+    assert "final_confidence_in_hidden_hypothesis" in data
+    assert "termination_reason" in data
+
+
+def test_sequential_compare_endpoint():
+    response = client.post("/api/sequential/compare?scenario_id=CS-CAT-001&hidden_hypothesis_id=H1&seed=42&budget=8.0&max_steps=3")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["comparison_id"].startswith("SEQ-BENCH-")
+    assert len(data["policy_summaries"]) == 6
+    assert "summary_verdict" in data
