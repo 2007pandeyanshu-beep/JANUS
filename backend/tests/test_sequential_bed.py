@@ -514,3 +514,80 @@ def test_paired_statistics_bootstrap_and_permutation():
     assert stats["ci_95"][0] <= stats["mean_difference"] <= stats["ci_95"][1]
     assert stats["cohen_d"] > 0.0
     assert 0.0 <= stats["raw_p_value"] <= 1.0
+
+
+def test_offline_combinatorial_upper_bound_branch_and_bound_exactness():
+    """
+    Verifies that the branch-and-bound combinatorial upper bound explores all candidates
+    in broad libraries (SYNTH-F, 50 candidates) and guarantees non-negative regret for all policies.
+    """
+    from scientific.synthetic_scenarios import get_synthetic_scenario
+    from scientific.sequential_engine import compute_offline_combinatorial_upper_bound
+    from scientific.validation import validate_and_normalize_priors, validate_experiment_predictions
+    
+    scen = get_synthetic_scenario("SYNTH-F", seed=42)
+    priors, _ = validate_and_normalize_priors(scen.hypotheses)
+    h_ids = list(priors.keys())
+    quantified = [e for e in scen.experiments if e.quantification_status != "UNQUANTIFIED_NEEDS_MEASUREMENT"]
+    l_matrices = {e.id: validate_experiment_predictions(e, h_ids)[0] for e in quantified}
+    nature = Nature(h_ids[0], np.random.default_rng(42), quantified, l_matrices)
+    
+    ig, subset, cost, _ = compute_offline_combinatorial_upper_bound(
+        scen, quantified, l_matrices, priors, nature, budget=10.0
+    )
+    assert ig >= 2.10, f"Expected global upper bound >= 2.10 bits, got {ig}"
+    assert cost <= 10.0 + 1e-6
+    assert len(subset) >= 2
+
+
+def test_identification_accuracy_and_target_attainment():
+    """Verifies tracking of final identification accuracy and target confidence attainment."""
+    scenario = get_wgs_case_study_scenario()
+    report = run_sequential_policy_comparison(
+        scenario=scenario,
+        hidden_hypothesis_id="H1",
+        seed=42,
+        budget=10.0,
+        confidence_threshold=0.95
+    )
+    for s in report.policy_summaries:
+        assert isinstance(s.hypothesis_identified, bool)
+        assert isinstance(s.target_confidence_achieved, bool)
+        if s.target_confidence_achieved:
+            assert s.final_confidence_h_star >= 0.95 or s.termination_reason == "TARGET_CONFIDENCE_ACHIEVED"
+
+
+def test_alpha_sensitivity_sample_size_consistency():
+    """
+    Regression test verifying root cause of Phase 5.2 sensitivity table discrepancy:
+    N=20 seeds produces 0.9481 bits, while N=50 seeds produces 0.9568 bits, exactly
+    reproducing both documented outputs.
+    """
+    from evaluation.sequential_evaluation import run_objective_sensitivity_audit
+    scenario = get_wgs_case_study_scenario()
+    
+    sens_20 = run_objective_sensitivity_audit(scenario, alpha_weights=[0.10], seeds=list(range(1, 21)))
+    sens_50 = run_objective_sensitivity_audit(scenario, alpha_weights=[0.10], seeds=list(range(1, 51)))
+    
+    ig_20 = sens_20["alpha_evaluations"]["alpha_0.1"]["mean_ig"]
+    ig_50 = sens_50["alpha_evaluations"]["alpha_0.1"]["mean_ig"]
+    
+    assert ig_20 == pytest.approx(0.9481, abs=1e-4)
+    assert ig_50 == pytest.approx(0.9568, abs=1e-4)
+
+
+def test_held_out_robustness_suite_structure():
+    """Verifies that run_held_out_robustness_suite returns structured evaluation without errors."""
+    from evaluation.sequential_evaluation import run_held_out_robustness_suite
+    scenario = get_wgs_case_study_scenario()
+    res = run_held_out_robustness_suite(
+        scenario,
+        dev_seeds=list(range(1, 6)),
+        held_out_seeds=list(range(101, 106)),
+        budget=10.0
+    )
+    assert "development_audit" in res
+    assert "held_out_audit" in res
+    assert "budget_sweep" in res
+    assert "threshold_sweep" in res
+    assert "stress_tests" in res

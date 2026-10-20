@@ -127,6 +127,8 @@ def run_sequential_policy_comparison(
         res, elapsed_ms = campaign_results[policy_key]
         regret_vs_offline = max(offline_ig - res.total_realized_information_gain, 0.0)
         signed_delta = privileged_realized_ig - res.total_realized_information_gain
+        top_hypo = max(res.final_posterior, key=res.final_posterior.get) if res.final_posterior else None
+        h_identified = bool(top_hypo == hidden_hypothesis_id)
         
         summary = PolicyCampaignSummary(
             policy_key=policy_key,
@@ -142,7 +144,8 @@ def run_sequential_policy_comparison(
             runtime_ms=round(elapsed_ms, 2),
             regret_vs_oracle_utility=round(regret_vs_offline, 4),
             regret_vs_offline_optimal=round(regret_vs_offline, 4),
-            signed_delta_vs_privileged=round(signed_delta, 4)
+            signed_delta_vs_privileged=round(signed_delta, 4),
+            hypothesis_identified=h_identified
         )
         summaries.append(summary)
         
@@ -182,128 +185,27 @@ def run_sequential_policy_comparison(
     )
 
 
-def run_multiseed_sequential_evaluation(
-    scenario: AnalysisInput,
-    hidden_hypotheses: Optional[List[str]] = None,
-    seeds: Optional[List[int]] = None,
-    budget: float = 10.0,
-    max_steps: int = 8,
-    confidence_threshold: float = 0.95,
-    cost_weight: float = 0.1
+def compute_and_adjust_paired_comparisons(
+    by_policy_data: Dict[str, Dict[str, List[float]]],
+    policies: List[str],
+    reference_policy: str = "janus_utility"
 ) -> Dict[str, Any]:
     """
-    Executes a multi-seed, multi-hypothesis statistical evaluation across sequential policies.
-    Computes mean, standard deviation, and 95% bootstrap confidence intervals for realized IG,
-    regret against the True Offline Combinatorial Bound, final confidence, and waste rate.
+    Computes paired difference statistics vs reference policy across all baselines
+    and applies step-down Holm-Bonferroni family-wise error rate control.
     """
-    if hidden_hypotheses is None:
-        hidden_hypotheses = [h.id for h in scenario.hypotheses]
-    if seeds is None:
-        seeds = list(range(1, 21))  # 20 seeds
-        
-    policies = [p[0] for p in POLICIES_TO_EVALUATE]
-    
-    audit_results: Dict[str, Any] = {
-        "scenario_name": scenario.scenario_name,
-        "n_seeds": len(seeds),
-        "hypotheses_evaluated": hidden_hypotheses,
-        "per_hypothesis": {},
-        "overall": {}
-    }
-    
-    overall_by_policy: Dict[str, Dict[str, List[float]]] = {
-        p: {"ig": [], "regret": [], "conf": [], "cost": [], "uninf": [], "failures": []}
-        for p in policies
-    }
-    overall_offline_igs: List[float] = []
-    
-    for h_id in hidden_hypotheses:
-        hypo_results: Dict[str, Dict[str, List[float]]] = {
-            p: {"ig": [], "regret": [], "conf": [], "cost": [], "uninf": [], "failures": []}
-            for p in policies
-        }
-        offline_igs: List[float] = []
-        
-        for seed in seeds:
-            report = run_sequential_policy_comparison(
-                scenario=scenario,
-                hidden_hypothesis_id=h_id,
-                seed=seed,
-                budget=budget,
-                max_steps=max_steps,
-                confidence_threshold=confidence_threshold,
-                cost_weight=cost_weight
-            )
-            offline_igs.append(report.offline_optimal_ig_bits)
-            overall_offline_igs.append(report.offline_optimal_ig_bits)
-            
-            for s in report.policy_summaries:
-                hypo_results[s.policy_key]["ig"].append(s.total_realized_ig_bits)
-                hypo_results[s.policy_key]["regret"].append(s.regret_vs_offline_optimal)
-                hypo_results[s.policy_key]["conf"].append(s.final_confidence_h_star)
-                hypo_results[s.policy_key]["cost"].append(s.total_cost)
-                hypo_results[s.policy_key]["uninf"].append(float(s.zero_eig_selections))
-                hypo_results[s.policy_key]["failures"].append(float(s.execution_failures))
-                
-                overall_by_policy[s.policy_key]["ig"].append(s.total_realized_ig_bits)
-                overall_by_policy[s.policy_key]["regret"].append(s.regret_vs_offline_optimal)
-                overall_by_policy[s.policy_key]["conf"].append(s.final_confidence_h_star)
-                overall_by_policy[s.policy_key]["cost"].append(s.total_cost)
-                overall_by_policy[s.policy_key]["uninf"].append(float(s.zero_eig_selections))
-                overall_by_policy[s.policy_key]["failures"].append(float(s.execution_failures))
-                
-        # Aggregate per hypothesis
-        hypo_summary: Dict[str, Any] = {
-            "offline_upper_bound": {
-                "mean_ig": round(float(np.mean(offline_igs)), 4),
-                "std_ig": round(float(np.std(offline_igs)), 4),
-            },
-            "policies": {}
-        }
-        for p in policies:
-            hypo_summary["policies"][p] = {
-                "mean_ig": round(float(np.mean(hypo_results[p]["ig"])), 4),
-                "std_ig": round(float(np.std(hypo_results[p]["ig"])), 4),
-                "mean_regret": round(float(np.mean(hypo_results[p]["regret"])), 4),
-                "std_regret": round(float(np.std(hypo_results[p]["regret"])), 4),
-                "mean_conf": round(float(np.mean(hypo_results[p]["conf"])), 4),
-                "mean_cost": round(float(np.mean(hypo_results[p]["cost"])), 2),
-                "mean_zero_eig": round(float(np.mean(hypo_results[p]["uninf"])), 2),
-                "mean_failures": round(float(np.mean(hypo_results[p]["failures"])), 2),
-            }
-        audit_results["per_hypothesis"][h_id] = hypo_summary
-        
-    # Aggregate overall
-    audit_results["overall"]["offline_upper_bound"] = {
-        "mean_ig": round(float(np.mean(overall_offline_igs)), 4),
-        "std_ig": round(float(np.std(overall_offline_igs)), 4),
-    }
-    audit_results["overall"]["policies"] = {}
-    for p in policies:
-        audit_results["overall"]["policies"][p] = {
-            "mean_ig": round(float(np.mean(overall_by_policy[p]["ig"])), 4),
-            "std_ig": round(float(np.std(overall_by_policy[p]["ig"])), 4),
-            "mean_regret": round(float(np.mean(overall_by_policy[p]["regret"])), 4),
-            "std_regret": round(float(np.std(overall_by_policy[p]["regret"])), 4),
-            "mean_conf": round(float(np.mean(overall_by_policy[p]["conf"])), 4),
-            "mean_cost": round(float(np.mean(overall_by_policy[p]["cost"])), 2),
-            "mean_zero_eig": round(float(np.mean(overall_by_policy[p]["uninf"])), 2),
-            "mean_failures": round(float(np.mean(overall_by_policy[p]["failures"])), 2),
-        }
-        
-    # Compute paired statistical comparisons vs JANUS Composite Utility
-    janus_igs = overall_by_policy["janus_utility"]["ig"]
-    janus_costs = overall_by_policy["janus_utility"]["cost"]
+    ref_igs = by_policy_data[reference_policy]["ig"]
+    ref_costs = by_policy_data[reference_policy]["cost"]
     paired_comparisons: Dict[str, Any] = {}
     
     for baseline in policies:
-        if baseline == "janus_utility":
+        if baseline == reference_policy:
             continue
-        base_igs = overall_by_policy[baseline]["ig"]
-        base_costs = overall_by_policy[baseline]["cost"]
+        base_igs = by_policy_data[baseline]["ig"]
+        base_costs = by_policy_data[baseline]["cost"]
         
-        ig_stats = compute_paired_statistics(janus_igs, base_igs)
-        cost_stats = compute_paired_statistics(janus_costs, base_costs)
+        ig_stats = compute_paired_statistics(ref_igs, base_igs)
+        cost_stats = compute_paired_statistics(ref_costs, base_costs)
         
         paired_comparisons[baseline] = {
             "ig_difference": ig_stats,
@@ -333,7 +235,147 @@ def run_multiseed_sequential_evaluation(
             conclusion = f"No statistically significant difference vs {b} after multiple-testing correction (p_adj={adj_p:.4f})."
         paired_comparisons[b]["statistical_verdict"] = conclusion
         
-    audit_results["overall"]["paired_comparisons_vs_janus"] = paired_comparisons
+    return paired_comparisons
+
+
+def run_multiseed_sequential_evaluation(
+    scenario: AnalysisInput,
+    hidden_hypotheses: Optional[List[str]] = None,
+    seeds: Optional[List[int]] = None,
+    budget: float = 10.0,
+    max_steps: int = 8,
+    confidence_threshold: float = 0.95,
+    cost_weight: float = 0.1
+) -> Dict[str, Any]:
+    """
+    Executes a multi-seed, multi-hypothesis statistical evaluation across sequential policies.
+    Computes mean, standard deviation, and 95% bootstrap confidence intervals for realized IG,
+    regret against the True Offline Combinatorial Bound, final confidence, and waste rate.
+    """
+    if hidden_hypotheses is None:
+        hidden_hypotheses = [h.id for h in scenario.hypotheses]
+    if seeds is None:
+        seeds = list(range(1, 21))  # 20 seeds
+        
+    policies = [p[0] for p in POLICIES_TO_EVALUATE]
+    
+    audit_results: Dict[str, Any] = {
+        "scenario_name": scenario.scenario_name,
+        "n_seeds": len(seeds),
+        "total_campaigns": len(seeds) * len(hidden_hypotheses),
+        "hypotheses_evaluated": hidden_hypotheses,
+        "per_hypothesis": {},
+        "overall": {}
+    }
+    
+    overall_by_policy: Dict[str, Dict[str, List[Any]]] = {
+        p: {"ig": [], "regret": [], "conf": [], "cost": [], "uninf": [], "failures": [], "correct": [], "target": [], "reasons": []}
+        for p in policies
+    }
+    overall_offline_igs: List[float] = []
+    
+    for h_id in hidden_hypotheses:
+        hypo_results: Dict[str, Dict[str, List[Any]]] = {
+            p: {"ig": [], "regret": [], "conf": [], "cost": [], "uninf": [], "failures": [], "correct": [], "target": [], "reasons": []}
+            for p in policies
+        }
+        offline_igs: List[float] = []
+        
+        for seed in seeds:
+            report = run_sequential_policy_comparison(
+                scenario=scenario,
+                hidden_hypothesis_id=h_id,
+                seed=seed,
+                budget=budget,
+                max_steps=max_steps,
+                confidence_threshold=confidence_threshold,
+                cost_weight=cost_weight
+            )
+            offline_igs.append(report.offline_optimal_ig_bits)
+            overall_offline_igs.append(report.offline_optimal_ig_bits)
+            
+            for s in report.policy_summaries:
+                is_correct = 1.0 if s.hypothesis_identified else 0.0
+                is_target = 1.0 if s.target_confidence_achieved else 0.0
+                
+                hypo_results[s.policy_key]["ig"].append(s.total_realized_ig_bits)
+                hypo_results[s.policy_key]["regret"].append(s.regret_vs_offline_optimal)
+                hypo_results[s.policy_key]["conf"].append(s.final_confidence_h_star)
+                hypo_results[s.policy_key]["cost"].append(s.total_cost)
+                hypo_results[s.policy_key]["uninf"].append(float(s.zero_eig_selections))
+                hypo_results[s.policy_key]["failures"].append(float(s.execution_failures))
+                hypo_results[s.policy_key]["correct"].append(is_correct)
+                hypo_results[s.policy_key]["target"].append(is_target)
+                hypo_results[s.policy_key]["reasons"].append(s.termination_reason)
+                
+                overall_by_policy[s.policy_key]["ig"].append(s.total_realized_ig_bits)
+                overall_by_policy[s.policy_key]["regret"].append(s.regret_vs_offline_optimal)
+                overall_by_policy[s.policy_key]["conf"].append(s.final_confidence_h_star)
+                overall_by_policy[s.policy_key]["cost"].append(s.total_cost)
+                overall_by_policy[s.policy_key]["uninf"].append(float(s.zero_eig_selections))
+                overall_by_policy[s.policy_key]["failures"].append(float(s.execution_failures))
+                overall_by_policy[s.policy_key]["correct"].append(is_correct)
+                overall_by_policy[s.policy_key]["target"].append(is_target)
+                overall_by_policy[s.policy_key]["reasons"].append(s.termination_reason)
+                
+        # Aggregate per hypothesis
+        hypo_summary: Dict[str, Any] = {
+            "offline_upper_bound": {
+                "mean_ig": round(float(np.mean(offline_igs)), 4),
+                "std_ig": round(float(np.std(offline_igs)), 4),
+            },
+            "policies": {}
+        }
+        for p in policies:
+            m_ig = float(np.mean(hypo_results[p]["ig"]))
+            m_cost = float(np.mean(hypo_results[p]["cost"]))
+            hypo_summary["policies"][p] = {
+                "mean_ig": round(m_ig, 4),
+                "std_ig": round(float(np.std(hypo_results[p]["ig"])), 4),
+                "mean_regret": round(float(np.mean(hypo_results[p]["regret"])), 4),
+                "std_regret": round(float(np.std(hypo_results[p]["regret"])), 4),
+                "mean_conf": round(float(np.mean(hypo_results[p]["conf"])), 4),
+                "identification_accuracy": round(float(np.mean(hypo_results[p]["correct"])), 4),
+                "target_attainment_rate": round(float(np.mean(hypo_results[p]["target"])), 4),
+                "mean_cost": round(m_cost, 2),
+                "ig_per_cost": round(m_ig / max(m_cost, 0.01), 4),
+                "mean_zero_eig": round(float(np.mean(hypo_results[p]["uninf"])), 2),
+                "mean_failures": round(float(np.mean(hypo_results[p]["failures"])), 2),
+                "termination_reasons": {r: hypo_results[p]["reasons"].count(r) for r in set(hypo_results[p]["reasons"])},
+            }
+        hypo_summary["paired_comparisons_vs_janus"] = compute_and_adjust_paired_comparisons(
+            hypo_results, policies, reference_policy="janus_utility"
+        )
+        audit_results["per_hypothesis"][h_id] = hypo_summary
+        
+    # Aggregate overall
+    audit_results["overall"]["offline_upper_bound"] = {
+        "mean_ig": round(float(np.mean(overall_offline_igs)), 4),
+        "std_ig": round(float(np.std(overall_offline_igs)), 4),
+    }
+    audit_results["overall"]["policies"] = {}
+    for p in policies:
+        ov_ig = float(np.mean(overall_by_policy[p]["ig"]))
+        ov_cost = float(np.mean(overall_by_policy[p]["cost"]))
+        audit_results["overall"]["policies"][p] = {
+            "mean_ig": round(ov_ig, 4),
+            "std_ig": round(float(np.std(overall_by_policy[p]["ig"])), 4),
+            "mean_regret": round(float(np.mean(overall_by_policy[p]["regret"])), 4),
+            "std_regret": round(float(np.std(overall_by_policy[p]["regret"])), 4),
+            "mean_conf": round(float(np.mean(overall_by_policy[p]["conf"])), 4),
+            "identification_accuracy": round(float(np.mean(overall_by_policy[p]["correct"])), 4),
+            "target_attainment_rate": round(float(np.mean(overall_by_policy[p]["target"])), 4),
+            "mean_cost": round(ov_cost, 2),
+            "ig_per_cost": round(ov_ig / max(ov_cost, 0.01), 4),
+            "mean_zero_eig": round(float(np.mean(overall_by_policy[p]["uninf"])), 2),
+            "mean_failures": round(float(np.mean(overall_by_policy[p]["failures"])), 2),
+            "termination_reasons": {r: overall_by_policy[p]["reasons"].count(r) for r in set(overall_by_policy[p]["reasons"])},
+        }
+        
+    # Compute paired statistical comparisons vs JANUS Composite Utility across all campaigns
+    audit_results["overall"]["paired_comparisons_vs_janus"] = compute_and_adjust_paired_comparisons(
+        overall_by_policy, policies, reference_policy="janus_utility"
+    )
     return audit_results
 
 
@@ -438,15 +480,20 @@ def run_objective_sensitivity_audit(
     """
     Evaluates sensitivity of JANUS sequential design performance across varying cost penalty weights
     alpha in U(e) = feasibility * EIG / (1 + alpha * cost).
+    
+    Defaults to 50 seeds (150 campaigns across 3 hypotheses) matching primary benchmark configuration.
     """
     if alpha_weights is None:
         alpha_weights = [0.0, 0.05, 0.10, 0.25, 0.50, 1.0]
     if seeds is None:
-        seeds = list(range(1, 21))
+        seeds = list(range(1, 51))  # 50 seeds matching primary benchmark configuration
         
     hypo_ids = [h.id for h in scenario.hypotheses]
     sensitivity: Dict[str, Any] = {
         "scenario_name": scenario.scenario_name,
+        "n_seeds": len(seeds),
+        "total_campaigns": len(seeds) * len(hypo_ids),
+        "seeds": list(seeds),
         "alpha_evaluations": {}
     }
     
@@ -467,7 +514,141 @@ def run_objective_sensitivity_audit(
             "mean_regret": janus_stats["mean_regret"],
             "mean_zero_eig": janus_stats["mean_zero_eig"],
             "mean_confidence": janus_stats["mean_conf"],
+            "accuracy": janus_stats.get("identification_accuracy", 0.0),
+            "target_attainment_rate": janus_stats.get("target_attainment_rate", 0.0),
             "ig_per_cost": round(janus_stats["mean_ig"] / max(janus_stats["mean_cost"], 0.1), 4)
         }
         
     return sensitivity
+
+
+def run_held_out_robustness_suite(
+    scenario: AnalysisInput,
+    dev_seeds: Optional[List[int]] = None,
+    held_out_seeds: Optional[List[int]] = None,
+    budget: float = 10.0,
+    confidence_threshold: float = 0.95,
+    cost_weight: float = 0.1
+) -> Dict[str, Any]:
+    """
+    Executes a comprehensive robustness and held-out evaluation suite:
+    1. Development seeds (1..50) vs Held-out evaluation seeds (101..150).
+    2. Budget variations: B in [5.0, 10.0, 15.0, 20.0] on held-out seeds.
+    3. Target confidence threshold variations: tau in [0.80, 0.90, 0.95, 0.99] on held-out seeds.
+    4. Alpha sensitivity on held-out seeds: alpha in [0.0, 0.05, 0.10, 0.25, 0.50, 1.0].
+    5. Stress test variants (low feasibility, high cost).
+    """
+    import copy
+    
+    if dev_seeds is None:
+        dev_seeds = list(range(1, 51))
+    if held_out_seeds is None:
+        held_out_seeds = list(range(101, 151))
+        
+    hypo_ids = [h.id for h in scenario.hypotheses]
+    
+    # 1. Development audit
+    dev_audit = run_multiseed_sequential_evaluation(
+        scenario=scenario,
+        hidden_hypotheses=hypo_ids,
+        seeds=dev_seeds,
+        budget=budget,
+        confidence_threshold=confidence_threshold,
+        cost_weight=cost_weight
+    )
+    
+    # 2. Held-out audit
+    held_out_audit = run_multiseed_sequential_evaluation(
+        scenario=scenario,
+        hidden_hypotheses=hypo_ids,
+        seeds=held_out_seeds,
+        budget=budget,
+        confidence_threshold=confidence_threshold,
+        cost_weight=cost_weight
+    )
+    
+    # 3. Budget sweep on held-out seeds (using first 25 held-out seeds)
+    sweep_seeds = held_out_seeds[:25]
+    budget_sweep: Dict[str, Any] = {}
+    for b in [5.0, 10.0, 15.0, 20.0]:
+        b_aud = run_multiseed_sequential_evaluation(
+            scenario=scenario,
+            hidden_hypotheses=hypo_ids,
+            seeds=sweep_seeds,
+            budget=b,
+            confidence_threshold=confidence_threshold,
+            cost_weight=cost_weight
+        )
+        budget_sweep[f"budget_{b}"] = {
+            "budget": b,
+            "offline_bound": b_aud["overall"]["offline_upper_bound"]["mean_ig"],
+            "janus_utility": b_aud["overall"]["policies"]["janus_utility"],
+            "raw_eig": b_aud["overall"]["policies"]["raw_eig"],
+            "cheapest": b_aud["overall"]["policies"]["cheapest"],
+            "uniform_random": b_aud["overall"]["policies"]["uniform_random"],
+        }
+        
+    # 4. Threshold sweep on held-out seeds
+    threshold_sweep: Dict[str, Any] = {}
+    for tau in [0.80, 0.90, 0.95, 0.99]:
+        t_aud = run_multiseed_sequential_evaluation(
+            scenario=scenario,
+            hidden_hypotheses=hypo_ids,
+            seeds=sweep_seeds,
+            budget=budget,
+            confidence_threshold=tau,
+            cost_weight=cost_weight
+        )
+        threshold_sweep[f"threshold_{tau}"] = {
+            "threshold": tau,
+            "janus_utility": t_aud["overall"]["policies"]["janus_utility"],
+            "raw_eig": t_aud["overall"]["policies"]["raw_eig"],
+            "cheapest": t_aud["overall"]["policies"]["cheapest"],
+        }
+        
+    # 5. Alpha sweep on held-out seeds
+    held_out_alpha_sweep = run_objective_sensitivity_audit(
+        scenario=scenario,
+        seeds=sweep_seeds,
+        budget=budget
+    )
+    
+    # 6. Stress test variants on held-out seeds
+    # 6a. Low feasibility variant (30% feasibility reduction)
+    low_feas_scen = copy.deepcopy(scenario)
+    for e in low_feas_scen.experiments:
+        e.feasibility = max(0.05, round(e.feasibility * 0.70, 2))
+    low_feas_audit = run_multiseed_sequential_evaluation(
+        scenario=low_feas_scen,
+        hidden_hypotheses=hypo_ids,
+        seeds=sweep_seeds,
+        budget=budget,
+        confidence_threshold=confidence_threshold,
+        cost_weight=cost_weight
+    )
+    
+    # 6b. High cost variant (2x cost on assays with cost > 3.0)
+    high_cost_scen = copy.deepcopy(scenario)
+    for e in high_cost_scen.experiments:
+        if e.cost > 3.0:
+            e.cost = round(e.cost * 2.0, 2)
+    high_cost_audit = run_multiseed_sequential_evaluation(
+        scenario=high_cost_scen,
+        hidden_hypotheses=hypo_ids,
+        seeds=sweep_seeds,
+        budget=budget,
+        confidence_threshold=confidence_threshold,
+        cost_weight=cost_weight
+    )
+    
+    return {
+        "development_audit": dev_audit,
+        "held_out_audit": held_out_audit,
+        "budget_sweep": budget_sweep,
+        "threshold_sweep": threshold_sweep,
+        "held_out_alpha_sweep": held_out_alpha_sweep,
+        "stress_tests": {
+            "low_feasibility": low_feas_audit["overall"],
+            "high_cost": high_cost_audit["overall"]
+        }
+    }

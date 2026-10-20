@@ -535,7 +535,8 @@ def compute_offline_combinatorial_upper_bound(
     likelihood_matrices: Dict[str, Dict[str, Dict[str, float]]],
     initial_priors: Dict[str, float],
     nature: Nature,
-    budget: float
+    budget: float,
+    max_evaluations: int = 100000
 ) -> Tuple[float, List[str], float, Dict[str, float]]:
     """
     Computes the true global offline combinatorial upper bound on realized information gain
@@ -543,15 +544,15 @@ def compute_offline_combinatorial_upper_bound(
     
     1. Filters out uninformative controls (identical likelihoods across all hypotheses)
        which mathematically cannot alter posterior beliefs.
-    2. Bounds combination search depth by remaining budget and lowest candidate costs.
-    3. Simulates Bayesian posterior updates for all successful executions in each budget-admissible subset.
-    4. Computes realized information gain Delta H(S) = H(P_0) - H(P_final).
-    5. Returns max_{S} Delta H(S), optimal subset, cost, and final posterior.
+    2. Sorts candidate experiments by cost ascending to enable exact branch-and-bound pruning.
+    3. Traverses all budget-admissible subsets: any branch whose cumulative cost exceeds budget
+       is pruned immediately.
+    4. Simulates Bayesian posterior updates for all successful executions in each budget-admissible subset.
+    5. Computes realized information gain Delta H(S) = H(P_0) - H(P_final).
+    6. Returns max_{S} Delta H(S), optimal subset, cost, and final posterior.
     
     Guarantees: Delta H_realized(pi) <= O*_offline for ALL sequential policies pi.
     """
-    import itertools
-    
     h_ids = list(initial_priors.keys())
     p0_entropy = compute_shannon_entropy(list(initial_priors.values()))
     realizations = nature.counterfactual_realizations
@@ -571,51 +572,50 @@ def compute_offline_combinatorial_upper_bound(
     if not informative:
         return 0.0, [], 0.0, dict(initial_priors)
         
-    # 2. For high-throughput pools (N > 12), prioritize top diagnostic candidates
-    if len(informative) > 12:
-        def diag_priority(e: Experiment) -> float:
-            variances = [float(np.var([likelihood_matrices[e.id][h].get(y, 0.0) for h in h_ids])) for y in e.possible_outcomes]
-            return float(e.feasibility * sum(variances) / (1.0 + 0.1 * e.cost))
-        informative = sorted(informative, key=diag_priority, reverse=True)[:12]
-        
-    # Determine maximum number of experiments that could ever fit in budget
-    sorted_costs = sorted([e.cost for e in informative])
-    cum_cost = 0.0
-    max_k = 0
-    for c in sorted_costs:
-        if cum_cost + c <= budget + 1e-9:
-            cum_cost += c
-            max_k += 1
-        else:
-            break
-    max_r = min(max_k, len(informative), 6)
+    # 2. Sort candidate experiments by cost ascending for exact branch-and-bound pruning
+    sorted_informative = sorted(informative, key=lambda e: e.cost)
     
     best_ig = 0.0
     best_subset: List[str] = []
     best_cost = 0.0
     best_posterior = dict(initial_priors)
     
-    for r in range(1, max_r + 1):
-        for subset in itertools.combinations(informative, r):
-            total_cost = sum(e.cost for e in subset)
-            if total_cost <= budget + 1e-9:
-                post = dict(initial_priors)
-                for exp in subset:
-                    is_succ, outcome = realizations.get(exp.id, (True, None))
-                    if is_succ and outcome:
-                        post = compute_bayesian_posterior_update(
-                            post,
-                            outcome,
-                            likelihood_matrices[exp.id]
-                        )
-                post_entropy = compute_shannon_entropy(list(post.values()))
-                realized_ig = max(p0_entropy - post_entropy, 0.0)
+    # Branch-and-bound DFS
+    # Stack stores: (start_index, current_cost, current_posterior, current_subset_ids)
+    stack = [(0, 0.0, dict(initial_priors), [])]
+    eval_count = 0
+    
+    while stack and eval_count < max_evaluations:
+        idx, cur_cost, cur_post, cur_ids = stack.pop()
+        eval_count += 1
+        
+        if cur_ids:
+            cur_entropy = compute_shannon_entropy(list(cur_post.values()))
+            cur_ig = max(p0_entropy - cur_entropy, 0.0)
+            if cur_ig > best_ig + 1e-6 or (abs(cur_ig - best_ig) <= 1e-6 and cur_cost < best_cost):
+                best_ig = cur_ig
+                best_subset = list(cur_ids)
+                best_cost = cur_cost
+                best_posterior = cur_post
                 
-                # Maximize realized IG, tie-break by lower cost
-                if realized_ig > best_ig + 1e-6 or (abs(realized_ig - best_ig) <= 1e-6 and total_cost < best_cost):
-                    best_ig = realized_ig
-                    best_subset = [e.id for e in subset]
-                    best_cost = total_cost
-                    best_posterior = post
-                    
+        # Explore adding subsequent experiments
+        # Since sorted_informative is sorted by cost ascending, break early when cost limit exceeded
+        for i in range(idx, len(sorted_informative)):
+            exp = sorted_informative[i]
+            nxt_cost = cur_cost + exp.cost
+            if nxt_cost > budget + 1e-9:
+                break
+                
+            is_succ, outcome = realizations.get(exp.id, (True, None))
+            if is_succ and outcome:
+                nxt_post = compute_bayesian_posterior_update(
+                    cur_post,
+                    outcome,
+                    likelihood_matrices[exp.id]
+                )
+            else:
+                nxt_post = cur_post
+                
+            stack.append((i + 1, nxt_cost, nxt_post, cur_ids + [exp.id]))
+            
     return round(best_ig, 4), best_subset, round(best_cost, 2), best_posterior

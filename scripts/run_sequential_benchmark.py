@@ -27,6 +27,7 @@ from evaluation.sequential_evaluation import (
     run_multiseed_sequential_evaluation,
     run_synthetic_benchmark_suite,
     run_objective_sensitivity_audit,
+    run_held_out_robustness_suite,
 )
 
 
@@ -151,8 +152,8 @@ def main():
         print(f"\n  === {s_key}: {s_data['scenario_name']} ===")
         print(f"  Hypotheses: {s_data['hypothesis_count']}, Candidate Experiments: {s_data['experiment_count']}")
         print(f"  Offline Upper Bound: {off['mean_ig']:.4f} +/- {off['std_ig']:.4f} bits")
-        print(f"    {'Policy':<36} {'Mean IG (bits)':<18} {'Mean Regret':<14} {'Mean Cost':<11} {'Mean 0-EIG':<10}")
-        print("    " + "-" * 88)
+        print(f"    {'Policy':<36} {'Mean IG (bits)':<18} {'Cost':<7} {'Acc':<7} {'Regret':<9} {'0-EIG':<7} {'Failures':<9}")
+        print("    " + "-" * 98)
         for p_key, p_stats in s_data["policies"].items():
             disp_name = next(p[1] for p in [
                 ("janus_utility", "JANUS Composite Utility"),
@@ -164,14 +165,24 @@ def main():
             ] if p[0] == p_key)
             line = (
                 f"    {disp_name:<36} {p_stats['mean_ig']:.4f} +/- {p_stats['std_ig']:.3f}   "
-                f"{p_stats['mean_regret']:.4f}        "
-                f"{p_stats['mean_cost']:<11.1f} "
-                f"{p_stats['mean_zero_eig']:<10.2f}"
+                f"{p_stats['mean_cost']:<7.1f} "
+                f"{p_stats.get('identification_accuracy', 0.0)*100:>4.0f}%  "
+                f"{p_stats['mean_regret']:<9.4f} "
+                f"{p_stats['mean_zero_eig']:<7.2f} "
+                f"{p_stats['mean_failures']:<9.2f}"
             )
             print(line)
             
+        print("    Paired Differences vs. JANUS Composite Utility:")
+        for b_key, comp in s_data.get("paired_comparisons_vs_janus", {}).items():
+            ig_c = comp["ig_difference"]
+            ci_s = f"[{ig_c['ci_95'][0]:+.3f}, {ig_c['ci_95'][1]:+.3f}]"
+            print(f"      vs {b_key:<20}: Delta IG = {ig_c['mean_difference']:+.4f} {ci_s:<18} d_z={ig_c['cohen_d']:>+6.2f}  p_raw={ig_c['raw_p_value']:.4f}  p_adj={ig_c['adjusted_p_value']:.4f}")
+            print(f"         Verdict: {comp['statistical_verdict']}")
+            
     print(f"\n[7] COST-PENALTY SENSITIVITY AUDIT (Alpha in [0.0, 1.0] on CS-CAT-001):")
-    sensitivity = run_objective_sensitivity_audit(scenario=scenario, seeds=list(range(1, 21)))
+    print("  Evaluating alpha sensitivity with N=50 seeds (150 campaigns) matching main audit configuration...")
+    sensitivity = run_objective_sensitivity_audit(scenario=scenario, seeds=list(range(1, 51)))
     print(f"    {'Alpha Weight':<18} {'Mean IG':<12} {'Mean Cost':<12} {'IG / Cost Efficiency':<22} {'Mean Conf(H*)':<15}")
     print("    " + "-" * 78)
     for a_key, a_data in sensitivity["alpha_evaluations"].items():
@@ -184,6 +195,42 @@ def main():
         )
         print(line)
         
+    print(f"\n[8] HELD-OUT ROBUSTNESS AND PARAMETER GENERALIZATION SUITE:")
+    print("  Running held-out evaluation (Seeds 101-150) and parameter sensitivity sweeps...")
+    robustness = run_held_out_robustness_suite(scenario=scenario)
+    
+    dev_j = robustness["development_audit"]["overall"]["policies"]["janus_utility"]
+    held_j = robustness["held_out_audit"]["overall"]["policies"]["janus_utility"]
+    print(f"\n  --- 8.1 Generalization: Development Seeds (1..50) vs Held-Out Seeds (101..150) ---")
+    print(f"    Development (150 campaigns): Realized IG = {dev_j['mean_ig']:.4f} +/- {dev_j['std_ig']:.3f} bits, Cost = {dev_j['mean_cost']:.2f}, Acc = {dev_j['identification_accuracy']*100:.1f}%")
+    print(f"    Held-Out    (150 campaigns): Realized IG = {held_j['mean_ig']:.4f} +/- {held_j['std_ig']:.3f} bits, Cost = {held_j['mean_cost']:.2f}, Acc = {held_j['identification_accuracy']*100:.1f}%")
+    
+    print(f"\n  --- 8.2 Budget Variations on Held-Out Seeds ---")
+    print(f"    {'Budget':<10} {'Offline Bound':<16} {'JANUS IG (Cost)':<22} {'Raw EIG IG (Cost)':<22} {'Cheapest IG (Cost)':<22}")
+    print("    " + "-" * 88)
+    for b_k, b_v in robustness["budget_sweep"].items():
+        j_str = f"{b_v['janus_utility']['mean_ig']:.4f} ({b_v['janus_utility']['mean_cost']:.1f})"
+        r_str = f"{b_v['raw_eig']['mean_ig']:.4f} ({b_v['raw_eig']['mean_cost']:.1f})"
+        c_str = f"{b_v['cheapest']['mean_ig']:.4f} ({b_v['cheapest']['mean_cost']:.1f})"
+        print(f"    B = {b_v['budget']:<6.1f} {b_v['offline_bound']:<16.4f} {j_str:<22} {r_str:<22} {c_str:<22}")
+        
+    print(f"\n  --- 8.3 Target Confidence Threshold Variations on Held-Out Seeds ---")
+    print(f"    {'Threshold':<12} {'JANUS IG (Cost)':<22} {'Raw EIG IG (Cost)':<22} {'Cheapest IG (Cost)':<22}")
+    print("    " + "-" * 76)
+    for t_k, t_v in robustness["threshold_sweep"].items():
+        j_str = f"{t_v['janus_utility']['mean_ig']:.4f} ({t_v['janus_utility']['mean_cost']:.1f})"
+        r_str = f"{t_v['raw_eig']['mean_ig']:.4f} ({t_v['raw_eig']['mean_cost']:.1f})"
+        c_str = f"{t_v['cheapest']['mean_ig']:.4f} ({t_v['cheapest']['mean_cost']:.1f})"
+        print(f"    tau = {t_v['threshold']:<6.2f} {j_str:<22} {r_str:<22} {c_str:<22}")
+        
+    print(f"\n  --- 8.4 Stress-Test Scenarios on Held-Out Seeds ---")
+    lf_j = robustness["stress_tests"]["low_feasibility"]["policies"]["janus_utility"]
+    lf_r = robustness["stress_tests"]["low_feasibility"]["policies"]["raw_eig"]
+    hc_j = robustness["stress_tests"]["high_cost"]["policies"]["janus_utility"]
+    hc_r = robustness["stress_tests"]["high_cost"]["policies"]["raw_eig"]
+    print(f"    Low-Feasibility Stress (-30% feasibility): JANUS IG = {lf_j['mean_ig']:.4f} (cost {lf_j['mean_cost']:.1f}) vs Raw EIG IG = {lf_r['mean_ig']:.4f} (cost {lf_r['mean_cost']:.1f})")
+    print(f"    High-Cost Stress (2x cost on high assays): JANUS IG = {hc_j['mean_ig']:.4f} (cost {hc_j['mean_cost']:.1f}) vs Raw EIG IG = {hc_r['mean_ig']:.4f} (cost {hc_r['mean_cost']:.1f})")
+
     print("\n" + "=" * 104)
 
 

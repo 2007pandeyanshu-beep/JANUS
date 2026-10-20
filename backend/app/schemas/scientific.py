@@ -335,6 +335,7 @@ class PolicyCampaignSummary(BaseModel):
     regret_vs_oracle_utility: float = Field(..., description="Legacy regret field; now reports regret against offline combinatorial optimal")
     regret_vs_offline_optimal: float = Field(default=0.0, description="True non-negative regret vs offline combinatorial upper bound")
     signed_delta_vs_privileged: float = Field(default=0.0, description="Signed difference: privileged_greedy_ig - policy_ig")
+    hypothesis_identified: bool = Field(default=False, description="True if top final posterior hypothesis matches true hidden hypothesis H*")
 
 
 class BEDPolicyComparisonReport(BaseModel):
