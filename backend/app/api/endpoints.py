@@ -2,14 +2,22 @@
 
 Provides REST endpoints for:
 - Health check & system diagnostics
-- Retrieving the demonstration scenario
+- Retrieving the demonstration scenario (Synthetic Benchmark)
+- Retrieving the published scientific case study (Pt/CeO2 WGS Catalysis)
+- Retrieving the structured evidence ledger & claims
 - Executing deterministic scientific analyses
 """
 
+from typing import List
 from fastapi import APIRouter, HTTPException, status
-from app.schemas.scientific import AnalysisInput, AnalysisResult
+from app.schemas.scientific import AnalysisInput, AnalysisResult, Evidence, Experiment
 from scientific.engine import ScientificEngine
 from scientific.scenarios import get_demo_scenario
+from scientific.evidence_ingestion import (
+    get_wgs_case_study_scenario,
+    load_evidence_ledger,
+    load_candidate_experiments,
+)
 from scientific.validation import ScientificValidationError
 
 router = APIRouter(prefix="/api", tags=["Scientific Intelligence"])
@@ -21,8 +29,13 @@ def health_check():
     return {
         "status": "online",
         "service": "JANUS Scientific Intelligence Core",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "engine_mode": "DETERMINISTIC_INFORMATION_THEORETIC",
+        "supported_scenarios": [
+            "synthetic_benchmark",
+            "published_case_study"
+        ],
+        "active_case_study": "CS-CAT-001 (Pt/CeO2 Low-Temperature WGS)",
         "llm_required": False
     }
 
@@ -31,15 +44,55 @@ def health_check():
 def get_demo():
     """
     Returns the synthetic kinase pathway benchmark scenario.
-    All data is clearly flagged with is_synthetic=True.
+    All data is explicitly flagged with is_synthetic=True.
     """
     return get_demo_scenario()
+
+
+@router.get("/scenarios/case-study", response_model=AnalysisInput)
+def get_case_study():
+    """
+    Returns the peer-reviewed published case study on Pt/CeO2 Water-Gas Shift catalysis.
+    All claims are verified against primary literature (Kalamaras 2011, Meunier 2007, Rodriguez 2007, Burch 2006).
+    is_synthetic is False.
+    """
+    try:
+        return get_wgs_case_study_scenario()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load case study package: {str(e)}"
+        )
+
+
+@router.get("/evidence/ledger", response_model=List[Evidence])
+def get_evidence():
+    """Retrieves the full evidence ledger containing claim-level primary source citations and DOIs."""
+    try:
+        return load_evidence_ledger()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load evidence ledger: {str(e)}"
+        )
+
+
+@router.get("/experiments/candidates", response_model=List[Experiment])
+def get_candidates():
+    """Retrieves candidate experiments including quantified and unquantified proposals."""
+    try:
+        return load_candidate_experiments()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load candidate experiments: {str(e)}"
+        )
 
 
 @router.post("/analysis/run", response_model=AnalysisResult)
 def run_analysis(payload: AnalysisInput):
     """
-    Executes deterministic experiment selection on user-supplied or demo hypotheses.
+    Executes deterministic experiment selection on user-supplied or case-study hypotheses.
     Computes Shannon entropy, Bayes posterior matrices, EIG, and composite rankings.
     """
     try:

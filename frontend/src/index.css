@@ -17,6 +17,8 @@
   --accent-rose-bg: #fff1f2;
   --accent-blue: #0284c7;
   --accent-blue-bg: #f0f9ff;
+  --accent-purple: #7c3aed;
+  --accent-purple-bg: #f5f3ff;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
@@ -42,7 +44,7 @@ code, pre, .mono {
 
 /* Layout */
 .app-container {
-  max-width: 1380px;
+  max-width: 1420px;
   margin: 0 auto;
   padding: 24px 32px 64px;
 }
@@ -55,6 +57,8 @@ code, pre, .mono {
   margin-bottom: 24px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .brand-section {
@@ -89,7 +93,8 @@ code, pre, .mono {
 .header-status {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* Badges */
@@ -123,6 +128,12 @@ code, pre, .mono {
   border: 1px solid #bae6fd;
 }
 
+.badge-purple {
+  background: var(--accent-purple-bg);
+  color: var(--accent-purple);
+  border: 1px solid #ddd6fe;
+}
+
 .badge-rose {
   background: var(--accent-rose-bg);
   color: var(--accent-rose);
@@ -135,6 +146,64 @@ code, pre, .mono {
   border: 1px solid #c7d2fe;
 }
 
+.badge-slate {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Mode Switcher Banner */
+.scenario-switcher-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.switcher-pills {
+  display: flex;
+  gap: 8px;
+  background: var(--bg-surface-alt);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.switcher-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switcher-btn.active {
+  background: #ffffff;
+  color: var(--text-main);
+  box-shadow: var(--shadow-sm);
+}
+
+.switcher-btn.active.real {
+  color: #059669;
+}
+
+.switcher-btn.active.demo {
+  color: #d97706;
+}
+
 /* Action Banner */
 .mission-banner {
   background: var(--bg-surface);
@@ -144,6 +213,10 @@ code, pre, .mono {
   padding: 16px 20px;
   margin-bottom: 24px;
   box-shadow: var(--shadow-sm);
+}
+
+.mission-banner.case-study-mode {
+  border-left-color: #059669;
 }
 
 .mission-banner h2 {
@@ -164,6 +237,7 @@ code, pre, .mono {
   gap: 8px;
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
 }
 
 .tab-btn {
@@ -176,6 +250,7 @@ code, pre, .mono {
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -199,6 +274,8 @@ code, pre, .mono {
   padding: 12px 20px;
   margin-bottom: 24px;
   box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .scenario-indicator {
@@ -206,6 +283,7 @@ code, pre, .mono {
   align-items: center;
   gap: 10px;
   font-size: 0.875rem;
+  flex-wrap: wrap;
 }
 
 .btn-primary {
@@ -222,6 +300,14 @@ code, pre, .mono {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.btn-primary.emerald {
+  background: #059669;
+}
+
+.btn-primary.emerald:hover {
+  background: #047857;
 }
 
 .btn-primary:hover {
@@ -308,7 +394,7 @@ code, pre, .mono {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow-sm);
   margin-bottom: 24px;
 }
@@ -377,14 +463,8 @@ tr:hover td {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Diagnostic Expander */
-.diagnostic-box {
-  background: var(--bg-surface-alt);
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-top: 10px;
-  border: 1px solid var(--border-subtle);
-  font-size: 0.8rem;
+.metric-highlight.green {
+  color: #059669;
 }
 
 /* Warnings and Alerts */
@@ -410,6 +490,12 @@ tr:hover td {
   color: #0369a1;
 }
 
+.alert-emerald {
+  background: var(--accent-emerald-bg);
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
 /* Log output */
 .log-stream {
   background: #0f172a;
@@ -431,4 +517,15 @@ tr:hover td {
 .log-prefix {
   color: #818cf8;
   font-weight: 600;
+}
+
+/* Link styling */
+.doi-link {
+  color: var(--brand-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.doi-link:hover {
+  text-decoration: underline;
 }

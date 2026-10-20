@@ -2,9 +2,9 @@
 
 Rigid Pydantic schemas for scientific entities:
 - Hypotheses
-- Experiments
-- Predicted Outcomes (Likelihoods)
-- Evidence & Provenance
+- Experiments (Quantified Bayesian and Unquantified Experimental Proposals)
+- Predicted Outcomes (Likelihoods with Provenance)
+- Evidence Ledger & Claims
 - Experiment Scores (Information-Theoretic)
 - Analysis Results & Audit Trails
 """
@@ -15,14 +15,22 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class Evidence(BaseModel):
     """Scientific evidence supporting a hypothesis or prior assumption."""
-    id: str = Field(..., description="Unique evidence identifier")
-    title: str = Field(..., description="Short title of the evidence source")
+    id: str = Field(..., description="Unique evidence identifier (e.g. 'CLM-WGS-001')")
+    title: str = Field(..., description="Short title of the claim or evidence source")
     source: str = Field(..., description="Citation, DOI, or repository URL")
+    source_doi: Optional[str] = Field(default=None, description="Direct DOI string if available")
+    source_location: Optional[str] = Field(default=None, description="Page, section, or figure in the cited source")
     provenance: str = Field(
         ...,
-        description="Provenance level: 'synthetic_fixture', 'user_supplied', 'literature', or 'experimental_observation'"
+        description="Provenance level: 'empirical_observation', 'author_interpretation', 'computational_dft', 'synthetic_fixture', or 'unquantified_assumption'"
     )
     summary: str = Field(..., description="Detailed description of the observation or finding")
+    quantitative_value: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Extracted quantitative value, metric, range, and unit"
+    )
+    supports_hypotheses: List[str] = Field(default_factory=list, description="Hypothesis IDs supported")
+    refutes_hypotheses: List[str] = Field(default_factory=list, description="Hypothesis IDs challenged/refuted")
     confidence: float = Field(
         1.0,
         ge=0.0,
@@ -58,7 +66,7 @@ class Hypothesis(BaseModel):
 
 class PredictedOutcome(BaseModel):
     """The predicted outcome probability distribution for an experiment under a specific hypothesis."""
-    outcome_label: str = Field(..., description="Label of the experimental outcome (e.g. 'Positive', 'Inhibited')")
+    outcome_label: str = Field(..., description="Label of the experimental outcome (e.g. 'Formate_Decay_Matches_TOF')")
     hypothesis_id: str = Field(..., description="Hypothesis ID under which this prediction applies")
     probability: float = Field(
         ...,
@@ -71,20 +79,28 @@ class PredictedOutcome(BaseModel):
         ge=0.0,
         description="Standard deviation or estimated variance in prediction"
     )
+    basis: Optional[str] = Field(
+        default=None,
+        description="Primary literature citation or physical principle establishing this likelihood"
+    )
 
 
 class Experiment(BaseModel):
     """Candidate experiment or intervention capable of generating observable outcomes."""
-    id: str = Field(..., description="Unique experiment identifier (e.g., 'EXP-01')")
+    id: str = Field(..., description="Unique experiment identifier (e.g., 'EXP-WGS-01')")
     name: str = Field(..., description="Descriptive title of the assay or experiment")
     description: str = Field(..., description="Protocol or procedure summary")
+    quantification_status: str = Field(
+        default="QUANTIFIED_BAYESIAN",
+        description="'QUANTIFIED_BAYESIAN' if likelihoods are documented; 'UNQUANTIFIED_NEEDS_MEASUREMENT' if qualitative only"
+    )
     possible_outcomes: List[str] = Field(
         ...,
         min_length=2,
         description="Exhaustive set of mutually exclusive outcome labels"
     )
     predictions: List[PredictedOutcome] = Field(
-        ...,
+        default_factory=list,
         description="Outcome probability distributions for each competing hypothesis"
     )
     cost: float = Field(
@@ -106,13 +122,21 @@ class Experiment(BaseModel):
         default=True,
         description="Hard constraint flag. If False, experiment is rejected during ranking"
     )
+    source_evidence_ids: List[str] = Field(
+        default_factory=list,
+        description="Evidence ledger IDs supporting this experimental design"
+    )
 
 
 class ExperimentScore(BaseModel):
     """Information-theoretic evaluation and ranking score for an experiment."""
     experiment_id: str
     experiment_name: str
-    rank: int = Field(..., ge=1, description="Deterministic rank (1 is most informative)")
+    rank: Optional[int] = Field(default=None, description="Deterministic rank (1 is most informative); None if unquantified")
+    quantification_status: str = Field(
+        default="QUANTIFIED_BAYESIAN",
+        description="'QUANTIFIED_BAYESIAN' or 'UNQUANTIFIED_NEEDS_MEASUREMENT'"
+    )
     
     # Information-Theoretic Metrics (measured in bits for base-2 logarithms)
     prior_entropy: float = Field(..., description="Prior Shannon entropy H(H) in bits")
@@ -130,20 +154,29 @@ class ExperimentScore(BaseModel):
     
     # Diagnostic Breakdown
     outcome_marginal_probabilities: Dict[str, float] = Field(
-        ...,
+        default_factory=dict,
         description="Marginal outcome probabilities P(y | e) across all hypotheses"
     )
     posterior_matrix: Dict[str, Dict[str, float]] = Field(
-        ...,
+        default_factory=dict,
         description="Posterior probability P(H_k | y, e) for each outcome y and hypothesis H_k"
     )
     explanation: str = Field(..., description="Deterministic scientific explanation for the score")
-    is_informative: bool = Field(..., description="True if expected information gain > 1e-4 bits")
+    missing_inputs_explanation: Optional[str] = Field(
+        default=None,
+        description="For unquantified experiments, exact data or measurements needed to enable Bayesian ranking"
+    )
+    is_informative: bool = Field(default=False, description="True if expected information gain > 1e-4 bits")
 
 
 class AnalysisInput(BaseModel):
     """Input payload for a complete hypothesis disambiguation analysis."""
     scenario_name: str = Field(default="Scientific Disambiguation Scenario")
+    scenario_type: str = Field(
+        default="synthetic_benchmark",
+        description="'synthetic_benchmark' or 'published_case_study'"
+    )
+    case_study_id: Optional[str] = Field(default=None, description="Optional ID of published case study")
     hypotheses: List[Hypothesis] = Field(..., min_length=2, description="At least two competing hypotheses required")
     experiments: List[Experiment] = Field(..., min_length=1, description="At least one candidate experiment")
     evidence: List[Evidence] = Field(default_factory=list, description="Supporting evidence items")
@@ -172,10 +205,16 @@ class AnalysisResult(BaseModel):
     analysis_id: str
     timestamp: str
     scenario_name: str
+    scenario_type: str = Field(default="synthetic_benchmark", description="'synthetic_benchmark' or 'published_case_study'")
+    case_study_id: Optional[str] = None
     is_synthetic: bool
     hypotheses: List[Hypothesis]
     normalized_priors: Dict[str, float]
     ranked_experiments: List[ExperimentScore]
+    unquantified_experiments: List[ExperimentScore] = Field(
+        default_factory=list,
+        description="Experiments that cannot be ranked because published quantitative likelihoods are unavailable"
+    )
     baseline_comparison: BaselineComparison
     audit_trail: List[str]
     warnings: List[str]

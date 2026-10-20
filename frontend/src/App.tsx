@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { checkBackendHealth, fetchDemoScenario, runAnalysis } from './api';
+import {
+  checkBackendHealth,
+  fetchDemoScenario,
+  fetchCaseStudyScenario,
+  runAnalysis,
+} from './api';
 import { AnalysisInput, AnalysisResult, ExperimentScore } from './types';
 
 export const App: React.FC = () => {
-  const [health, setHealth] = useState<{ status: string; engine_mode: string; version: string } | null>(null);
-  const [scenario, setScenario] = useState<AnalysisInput | null>(null);
+  const [health, setHealth] = useState<{
+    status: string;
+    engine_mode: string;
+    version: string;
+    active_case_study?: string;
+  } | null>(null);
+  
+  const [currentScenario, setCurrentScenario] = useState<AnalysisInput | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [running, setRunning] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'hypotheses' | 'experiments' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'hypotheses' | 'experiments' | 'evidence' | 'audit'>('overview');
   const [selectedExpId, setSelectedExpId] = useState<string | null>(null);
+  const [selectedMode, setSelectedMode] = useState<'case_study' | 'synthetic'>('case_study');
 
-  // Load initial backend health and demo scenario
+  // Load published case study as default primary scientific scenario
   useEffect(() => {
     async function init() {
       try {
@@ -21,11 +33,12 @@ export const App: React.FC = () => {
         const healthData = await checkBackendHealth();
         setHealth(healthData);
         
-        const demoData = await fetchDemoScenario();
-        setScenario(demoData);
+        // Default to real published case study on Pt/CeO2
+        const caseStudyData = await fetchCaseStudyScenario();
+        setCurrentScenario(caseStudyData);
+        setSelectedMode('case_study');
         
-        // Execute initial baseline analysis
-        const result = await runAnalysis(demoData);
+        const result = await runAnalysis(caseStudyData);
         setAnalysisResult(result);
         if (result.ranked_experiments.length > 0) {
           setSelectedExpId(result.ranked_experiments[0].experiment_id);
@@ -39,12 +52,35 @@ export const App: React.FC = () => {
     init();
   }, []);
 
-  const handleRunAnalysis = async () => {
-    if (!scenario) return;
+  const handleSwitchMode = async (mode: 'case_study' | 'synthetic') => {
     try {
       setRunning(true);
       setError(null);
-      const result = await runAnalysis(scenario);
+      setSelectedMode(mode);
+      
+      const scenarioData = mode === 'case_study' 
+        ? await fetchCaseStudyScenario()
+        : await fetchDemoScenario();
+        
+      setCurrentScenario(scenarioData);
+      const result = await runAnalysis(scenarioData);
+      setAnalysisResult(result);
+      if (result.ranked_experiments.length > 0) {
+        setSelectedExpId(result.ranked_experiments[0].experiment_id);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to switch scenario mode.');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleRunAnalysis = async () => {
+    if (!currentScenario) return;
+    try {
+      setRunning(true);
+      setError(null);
+      const result = await runAnalysis(currentScenario);
       setAnalysisResult(result);
     } catch (err: any) {
       setError(err.message || 'Execution failed.');
@@ -54,44 +90,30 @@ export const App: React.FC = () => {
   };
 
   const handlePriorChange = (hypothesisId: string, newPrior: number) => {
-    if (!scenario) return;
-    const updatedHypotheses = scenario.hypotheses.map(h => 
+    if (!currentScenario) return;
+    const updatedHypotheses = currentScenario.hypotheses.map(h => 
       h.id === hypothesisId ? { ...h, prior: Math.max(0.01, Math.min(1.0, newPrior)) } : h
     );
-    setScenario({ ...scenario, hypotheses: updatedHypotheses });
-  };
-
-  const handleResetDemo = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const demoData = await fetchDemoScenario();
-      setScenario(demoData);
-      const result = await runAnalysis(demoData);
-      setAnalysisResult(result);
-      if (result.ranked_experiments.length > 0) {
-        setSelectedExpId(result.ranked_experiments[0].experiment_id);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    setCurrentScenario({ ...currentScenario, hypotheses: updatedHypotheses });
   };
 
   if (loading) {
     return (
       <div className="app-container" style={{ textAlign: 'center', paddingTop: '100px' }}>
         <div className="brand-badge" style={{ display: 'inline-block', marginBottom: '16px' }}>JANUS</div>
-        <h2>Initializing Scientific Intelligence Workspace...</h2>
-        <p style={{ color: 'var(--text-subtle)', marginTop: '8px' }}>Verifying Python 3.12 engine & deterministic state machine</p>
+        <h2>Loading Scientific Intelligence Core...</h2>
+        <p style={{ color: 'var(--text-subtle)', marginTop: '8px' }}>
+          Ingesting published heterogeneous catalysis case study & verifying evidence ledger
+        </p>
       </div>
     );
   }
 
-  const selectedScore: ExperimentScore | undefined = analysisResult?.ranked_experiments.find(
-    s => s.experiment_id === selectedExpId
-  );
+  const selectedScore: ExperimentScore | undefined = 
+    analysisResult?.ranked_experiments.find(s => s.experiment_id === selectedExpId) ||
+    analysisResult?.unquantified_experiments.find(s => s.experiment_id === selectedExpId);
+
+  const isRealCaseStudy = currentScenario?.is_synthetic === false;
 
   return (
     <div className="app-container">
@@ -114,8 +136,14 @@ export const App: React.FC = () => {
           ) : (
             <span className="badge badge-rose">API: OFFLINE</span>
           )}
-          <span className="badge badge-amber">SYNTHETIC BENCHMARK</span>
-          <span className="badge badge-indigo">V0.1.0 VERTICAL SLICE</span>
+
+          {isRealCaseStudy ? (
+            <span className="badge badge-emerald">PUBLISHED PRIMARY EVIDENCE (CS-CAT-001)</span>
+          ) : (
+            <span className="badge badge-amber">SYNTHETIC BENCHMARK</span>
+          )}
+
+          <span className="badge badge-indigo">PHASE 2 CASE STUDY</span>
         </div>
       </header>
 
@@ -126,12 +154,50 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Mission Banner */}
-      <div className="mission-banner">
-        <h2>Discriminative Selection Engine</h2>
+      {/* Scenario Mode Switcher Bar */}
+      <div className="scenario-switcher-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <strong style={{ fontSize: '0.875rem' }}>Select Scenario Mode:</strong>
+          <div className="switcher-pills">
+            <button
+              className={`switcher-btn ${selectedMode === 'case_study' ? 'active real' : ''}`}
+              onClick={() => handleSwitchMode('case_study')}
+              disabled={running}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
+              Published Case Study: Pt/CeO2 WGS Catalysis
+            </button>
+            <button
+              className={`switcher-btn ${selectedMode === 'synthetic' ? 'active demo' : ''}`}
+              onClick={() => handleSwitchMode('synthetic')}
+              disabled={running}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }}></span>
+              Synthetic Benchmark: Kinase Signaling Pathway
+            </button>
+          </div>
+        </div>
+
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+          {isRealCaseStudy ? (
+            <span>Peer-reviewed empirical data from <em>J. Catal.</em> & <em>Science</em></span>
+          ) : (
+            <span>Illustrative benchmark fixture for algorithmic testing</span>
+          )}
+        </div>
+      </div>
+
+      {/* Mission / Context Banner */}
+      <div className={`mission-banner ${isRealCaseStudy ? 'case-study-mode' : ''}`}>
+        <h2>
+          {isRealCaseStudy
+            ? 'Heterogeneous Catalysis Case Study: Pt/CeO2 Water-Gas Shift Mechanism'
+            : 'Discriminative Selection Engine (Synthetic Demonstration)'}
+        </h2>
         <p>
-          JANUS calculates expected information gain (Shannon entropy reduction) over competing scientific hypotheses. 
-          Rather than predicting generic outcomes, JANUS identifies the exact assays that maximally disambiguate rival scientific theories under budget and feasibility constraints.
+          {isRealCaseStudy
+            ? 'Disambiguating whether low-temperature WGS on Pt/CeO2 proceeds via a Redox (Mars-van Krevelen) mechanism, an Associative Formate pathway, or an Associative Carboxyl pathway with formates as spectators. JANUS computes Expected Information Gain (EIG in bits) using published isotopic kinetic data and operando spectroscopy detection limits.'
+            : 'JANUS calculates Shannon entropy reduction to identify the exact assays that maximally distinguish competing scientific hypotheses under budget and feasibility constraints.'}
         </p>
       </div>
 
@@ -147,7 +213,7 @@ export const App: React.FC = () => {
           className={`tab-btn ${activeTab === 'hypotheses' ? 'active' : ''}`}
           onClick={() => setActiveTab('hypotheses')}
         >
-          2. Competing Hypotheses ({scenario?.hypotheses.length || 0})
+          2. Competing Hypotheses ({currentScenario?.hypotheses.length || 0})
         </button>
         <button 
           className={`tab-btn ${activeTab === 'experiments' ? 'active' : ''}`}
@@ -156,10 +222,16 @@ export const App: React.FC = () => {
           3. Experiment Explorer & Ranking ({analysisResult?.ranked_experiments.length || 0})
         </button>
         <button 
+          className={`tab-btn ${activeTab === 'evidence' ? 'active' : ''}`}
+          onClick={() => setActiveTab('evidence')}
+        >
+          4. Evidence Ledger & Claims ({currentScenario?.evidence.length || 0})
+        </button>
+        <button 
           className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
           onClick={() => setActiveTab('audit')}
         >
-          4. Evidence & Audit Trail
+          5. Mathematical Audit Trail
         </button>
       </nav>
 
@@ -167,15 +239,20 @@ export const App: React.FC = () => {
       <div className="control-bar">
         <div className="scenario-indicator">
           <strong>Active Scenario:</strong>
-          <span>{scenario?.scenario_name}</span>
-          <span className="badge badge-amber" style={{ fontSize: '0.65rem' }}>ILLUSTRATIVE VALUES</span>
+          <span>{currentScenario?.scenario_name}</span>
+          {isRealCaseStudy ? (
+            <span className="badge badge-emerald" style={{ fontSize: '0.65rem' }}>EVIDENCE-GROUNDED</span>
+          ) : (
+            <span className="badge badge-amber" style={{ fontSize: '0.65rem' }}>ILLUSTRATIVE VALUES</span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-secondary" onClick={handleResetDemo} disabled={running}>
-            Reset Demo Scenario
-          </button>
-          <button className="btn-primary" onClick={handleRunAnalysis} disabled={running}>
-            {running ? 'Computing Information Gain...' : '▶ Run Deterministic Analysis'}
+          <button 
+            className={`btn-primary ${isRealCaseStudy ? 'emerald' : ''}`} 
+            onClick={handleRunAnalysis} 
+            disabled={running}
+          >
+            {running ? 'Computing Information Gain...' : '▶ Recompute Deterministic Ranking'}
           </button>
         </div>
       </div>
@@ -189,10 +266,10 @@ export const App: React.FC = () => {
               <div className="card-header">
                 <div>
                   <h3 className="card-title">Evaluation Benchmark: JANUS vs Random Experiment Selection</h3>
-                  <p className="card-subtitle">Rigorous baseline evaluation metric</p>
+                  <p className="card-subtitle">Quantified on the candidate experiment set</p>
                 </div>
                 <span className="badge badge-emerald">
-                  {analysisResult.baseline_comparison.eig_improvement_ratio}x EIG GAIN
+                  {analysisResult.baseline_comparison.eig_improvement_ratio}x EIG MULTIPLIER
                 </span>
               </div>
               <div className="card-body">
@@ -207,14 +284,14 @@ export const App: React.FC = () => {
                     </p>
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Top JANUS Candidate EIG</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Top Candidate EIG</span>
                     <p className="metric-highlight" style={{ fontSize: '1.2rem', color: 'var(--brand-primary)' }}>
                       {analysisResult.baseline_comparison.best_experiment_eig.toFixed(3)} bits
                     </p>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Prior Hypothesis Entropy</span>
-                    <p className="metric-highlight" style={{ fontSize: '1.2rem', color: 'var(--accent-emerald)' }}>
+                    <p className="metric-highlight green" style={{ fontSize: '1.2rem' }}>
                       {analysisResult.ranked_experiments[0]?.prior_entropy.toFixed(3)} bits
                     </p>
                   </div>
@@ -223,14 +300,24 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Core Architecture Overview */}
+          {/* Core Architecture Cards */}
           <div className="cards-grid">
             <div className="card">
               <h3 className="card-title" style={{ marginBottom: '8px' }}>Scientific Disambiguation Problem</h3>
               <p className="card-body">
-                In complex biology and chemistry, multiple hypotheses often explain identical baseline phenotypes. 
-                Running experiments indiscriminately wastes time and budget. 
-                JANUS applies information theory to target only high-yield discriminatory experiments.
+                {isRealCaseStudy ? (
+                  <span>
+                    In the low-temperature water-gas shift reaction, multiple plausible reaction pathways explain steady-state CO2 generation. 
+                    Running standard kinetic rate measurements cannot differentiate whether formates are active intermediates or inert spectators. 
+                    JANUS selects transient isotopic and operando spectroscopic experiments that target the exact points of theoretical divergence.
+                  </span>
+                ) : (
+                  <span>
+                    In complex biology and chemistry, multiple hypotheses often explain identical baseline phenotypes. 
+                    Running experiments indiscriminately wastes time and budget. 
+                    JANUS applies information theory to target only high-yield discriminatory experiments.
+                  </span>
+                )}
               </p>
               <div style={{ marginTop: '14px', padding: '10px 12px', background: 'var(--accent-blue-bg)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--accent-blue)' }}>
                 <strong>Mathematical Foundation:</strong> Mutual Information: I(H; Y) = H(H) - E_y[H(H | y)]
@@ -238,14 +325,14 @@ export const App: React.FC = () => {
             </div>
 
             <div className="card">
-              <h3 className="card-title" style={{ marginBottom: '8px' }}>Validation & Integrity Principles</h3>
+              <h3 className="card-title" style={{ marginBottom: '8px' }}>Evidence & Provenance Integrity</h3>
               <p className="card-body">
-                • <strong>Zero Hallucinated Science:</strong> All current values are explicitly tagged as synthetic fixtures.<br/>
-                • <strong>Deterministic Ranking:</strong> Exact mathematical computation; no LLM decides the top experiment.<br/>
-                • <strong>Constraint Aware:</strong> Hard rejection of infeasible assays and cost penalization.
+                • <strong>No Fabricated Probabilities:</strong> Experiments lacking published quantitative data (e.g., sub-second stopped-flow carboxyl detection) are isolated as unquantified proposals.<br/>
+                • <strong>Full Provenance Ledger:</strong> Every claim links directly to its DOI and specific page/figure in primary literature.<br/>
+                • <strong>Negative Control Verification:</strong> Homogeneous gas-phase blank control confirms 0.0 bits EIG when predictions are identical.
               </p>
               <div style={{ marginTop: '14px', padding: '10px 12px', background: 'var(--accent-emerald-bg)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--accent-emerald)' }}>
-                <strong>Status:</strong> {analysisResult?.validation_status}
+                <strong>Validation Status:</strong> {analysisResult?.validation_status}
               </div>
             </div>
           </div>
@@ -257,13 +344,13 @@ export const App: React.FC = () => {
         <div>
           <div className="alert-box alert-blue">
             <span>
-              <strong>Hypothesis Sensitivity:</strong> You can adjust prior probabilities below and re-run the analysis 
+              <strong>Hypothesis Sensitivity:</strong> Adjust prior probabilities below and recompute the analysis 
               to verify how the deterministic engine shifts experiment priorities when scientific beliefs change.
             </span>
           </div>
 
           <div className="cards-grid">
-            {scenario?.hypotheses.map(h => {
+            {currentScenario?.hypotheses.map(h => {
               const normalizedP = analysisResult?.normalized_priors[h.id] ?? h.prior;
               return (
                 <div key={h.id} className="card">
@@ -309,7 +396,7 @@ export const App: React.FC = () => {
                   </div>
 
                   <div style={{ marginTop: '12px', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                    <strong>Evidence citations:</strong> {h.evidence_ids.join(', ') || 'None attached'}
+                    <strong>Supporting Claims:</strong> {h.evidence_ids.join(', ') || 'None attached'}
                   </div>
                 </div>
               );
@@ -321,6 +408,9 @@ export const App: React.FC = () => {
       {/* TAB 3: EXPERIMENT EXPLORER & RANKING */}
       {activeTab === 'experiments' && (
         <div>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '12px' }}>
+            Deterministically Quantified Experiments (Ranked by Utility)
+          </h3>
           <div className="table-container">
             <table>
               <thead>
@@ -402,13 +492,79 @@ export const App: React.FC = () => {
             </table>
           </div>
 
+          {/* Unquantified Proposals Section */}
+          {analysisResult?.unquantified_experiments && analysisResult.unquantified_experiments.length > 0 && (
+            <div style={{ marginTop: '28px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                  Unquantified Experimental Proposals (No Fabricated Likelihoods)
+                </h3>
+                <span className="badge badge-slate">EXCLUDED FROM EIG RANKING</span>
+              </div>
+              <div className="alert-box alert-amber">
+                <div>
+                  <strong>Integrity Boundary:</strong> The following experiments are scientifically formulated in literature, 
+                  but published quantitative likelihood distributions are missing. JANUS refuses to invent synthetic probabilities 
+                  to make the ranking appear complete. Empirical signal-to-noise and kinetic lifetime measurements are required.
+                </div>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Proposal ID</th>
+                      <th>Experimental Proposal</th>
+                      <th>Status</th>
+                      <th>Feasibility</th>
+                      <th>Missing Information Required</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysisResult.unquantified_experiments.map(unq => (
+                      <tr key={unq.experiment_id}>
+                        <td className="mono"><strong>{unq.experiment_id}</strong></td>
+                        <td>
+                          <strong>{unq.experiment_name}</strong>
+                        </td>
+                        <td>
+                          <span className="badge badge-slate">UNQUANTIFIED</span>
+                        </td>
+                        <td>
+                          <span className="badge badge-blue">{(unq.feasibility * 100).toFixed(0)}%</span>
+                        </td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {unq.missing_inputs_explanation}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn-secondary" 
+                            style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                            onClick={() => setSelectedExpId(unq.experiment_id)}
+                          >
+                            Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Detailed Inspector for Selected Experiment */}
           {selectedScore && (
-            <div className="card" style={{ borderLeft: '4px solid var(--brand-primary)' }}>
+            <div className="card" style={{ borderLeft: '4px solid var(--brand-primary)', marginTop: '20px' }}>
               <div className="card-header">
                 <div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                    <span className="badge badge-indigo">RANK #{selectedScore.rank}</span>
+                    {selectedScore.rank ? (
+                      <span className="badge badge-indigo">RANK #{selectedScore.rank}</span>
+                    ) : (
+                      <span className="badge badge-slate">UNQUANTIFIED PROPOSAL</span>
+                    )}
                     <span className="mono" style={{ color: 'var(--text-subtle)', fontSize: '0.8rem' }}>{selectedScore.experiment_id}</span>
                   </div>
                   <h3 className="card-title" style={{ fontSize: '1.15rem' }}>{selectedScore.experiment_name}</h3>
@@ -421,104 +577,148 @@ export const App: React.FC = () => {
 
               <div className="card-body">
                 <p style={{ marginBottom: '14px', background: 'var(--bg-surface-alt)', padding: '12px', borderRadius: '6px' }}>
-                  <strong>Deterministic Rationale:</strong> {selectedScore.explanation}
+                  <strong>Scientific Rationale:</strong> {selectedScore.explanation}
                 </p>
 
-                {/* Bayesian Posterior Update Matrix */}
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-subtle)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                  Bayesian Posterior Distribution Matrix: P(Hypothesis | Observed Outcome)
-                </h4>
-                <div className="table-container" style={{ marginBottom: '12px' }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Observable Outcome (y)</th>
-                        <th>Marginal P(y)</th>
-                        {scenario?.hypotheses.map(h => (
-                          <th key={h.id}>P({h.id} | y)</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(selectedScore.posterior_matrix).map(([outcome, posteriors]) => (
-                        <tr key={outcome}>
-                          <td><strong>{outcome}</strong></td>
-                          <td>
-                            <span className="mono">{selectedScore.outcome_marginal_probabilities[outcome]?.toFixed(3) ?? '0.000'}</span>
-                          </td>
-                          {scenario?.hypotheses.map(h => {
-                            const p = posteriors[h.id] ?? 0.0;
-                            const isHigh = p > 0.8;
-                            return (
-                              <td key={h.id}>
-                                <span className={`mono ${isHigh ? 'metric-highlight' : ''}`} style={{ fontWeight: isHigh ? 700 : 400 }}>
-                                  {(p * 100).toFixed(1)}%
-                                </span>
+                {/* Bayesian Posterior Update Matrix (only if quantified) */}
+                {Object.keys(selectedScore.posterior_matrix).length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-subtle)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Bayesian Posterior Distribution Matrix: P(Hypothesis | Observed Outcome)
+                    </h4>
+                    <div className="table-container" style={{ marginBottom: '12px' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Observable Outcome (y)</th>
+                            <th>Marginal P(y)</th>
+                            {currentScenario?.hypotheses.map(h => (
+                              <th key={h.id}>P({h.id} | y)</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(selectedScore.posterior_matrix).map(([outcome, posteriors]) => (
+                            <tr key={outcome}>
+                              <td><strong>{outcome}</strong></td>
+                              <td>
+                                <span className="mono">{selectedScore.outcome_marginal_probabilities[outcome]?.toFixed(3) ?? '0.000'}</span>
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                              {currentScenario?.hypotheses.map(h => {
+                                const p = posteriors[h.id] ?? 0.0;
+                                const isHigh = p > 0.8;
+                                return (
+                                  <td key={h.id}>
+                                    <span className={`mono ${isHigh ? 'metric-highlight green' : ''}`} style={{ fontWeight: isHigh ? 700 : 400 }}>
+                                      {(p * 100).toFixed(1)}%
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 4: EVIDENCE & AUDIT TRAIL */}
-      {activeTab === 'audit' && (
+      {/* TAB 4: EVIDENCE LEDGER & CLAIMS */}
+      {activeTab === 'evidence' && (
         <div>
-          {/* Data Provenance Table */}
           <div className="card" style={{ marginBottom: '24px' }}>
-            <h3 className="card-title" style={{ marginBottom: '10px' }}>Scientific Data Provenance & Trust Matrix</h3>
+            <div className="card-header">
+              <div>
+                <h3 className="card-title">Peer-Reviewed Evidence Ledger & Claim Verification</h3>
+                <p className="card-subtitle">Every claim is traced to an authoritative peer-reviewed primary source</p>
+              </div>
+              <span className="badge badge-emerald">PRIMARY SOURCES VERIFIED</span>
+            </div>
+
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
-                    <th>Entity</th>
-                    <th>Source Identifier</th>
-                    <th>Classification</th>
-                    <th>Confidence</th>
-                    <th>Status</th>
+                    <th>Claim ID</th>
+                    <th>Verified Statement</th>
+                    <th>Provenance</th>
+                    <th>Primary Source & DOI</th>
+                    <th>Location in Source</th>
+                    <th>Extracted Quantitative Value</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {scenario?.evidence.map(ev => (
-                    <tr key={ev.id}>
-                      <td><strong>{ev.title}</strong></td>
-                      <td className="mono" style={{ fontSize: '0.75rem' }}>{ev.source}</td>
-                      <td>
-                        <span className="badge badge-amber">{ev.provenance}</span>
-                      </td>
-                      <td className="mono">{(ev.confidence * 100).toFixed(0)}%</td>
-                      <td>
-                        <span className="badge badge-emerald">Active Benchmark</span>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td><strong>Hypothesis Priors</strong></td>
-                    <td>User Interactive / Scenario Config</td>
-                    <td><span className="badge badge-blue">User-Supplied</span></td>
-                    <td className="mono">100%</td>
-                    <td><span className="badge badge-emerald">Normalized</span></td>
-                  </tr>
-                  <tr>
-                    <td><strong>Experiment Ranking Engine</strong></td>
-                    <td>Deterministic Shannon Entropy Engine</td>
-                    <td><span className="badge badge-indigo">Algorithmic Math</span></td>
-                    <td className="mono">Deterministic</td>
-                    <td><span className="badge badge-emerald">Verified</span></td>
-                  </tr>
+                  {currentScenario?.evidence.map(ev => {
+                    let provBadgeClass = 'badge-slate';
+                    if (ev.provenance === 'empirical_observation') provBadgeClass = 'badge-emerald';
+                    else if (ev.provenance === 'computational_dft') provBadgeClass = 'badge-blue';
+                    else if (ev.provenance === 'author_interpretation') provBadgeClass = 'badge-purple';
+                    else if (ev.provenance === 'synthetic_fixture') provBadgeClass = 'badge-amber';
+
+                    return (
+                      <tr key={ev.id}>
+                        <td className="mono" style={{ whiteSpace: 'nowrap' }}>
+                          <strong>{ev.id}</strong>
+                        </td>
+                        <td style={{ minWidth: '280px' }}>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '6px' }}>{ev.summary}</p>
+                          <div style={{ display: 'flex', gap: '6px', fontSize: '0.75rem' }}>
+                            {ev.supports_hypotheses && ev.supports_hypotheses.length > 0 && (
+                              <span style={{ color: '#059669' }}>Supports: {ev.supports_hypotheses.join(', ')}</span>
+                            )}
+                            {ev.refutes_hypotheses && ev.refutes_hypotheses.length > 0 && (
+                              <span style={{ color: '#e11d48' }}>Refutes: {ev.refutes_hypotheses.join(', ')}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${provBadgeClass}`} style={{ whiteSpace: 'nowrap' }}>
+                            {ev.provenance.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td style={{ minWidth: '220px', fontSize: '0.8rem' }}>
+                          <div>{ev.source}</div>
+                          {ev.source_doi && (
+                            <a 
+                              href={`https://doi.org/${ev.source_doi}`} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="doi-link"
+                            >
+                              doi:{ev.source_doi} ↗
+                            </a>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-subtle)', whiteSpace: 'nowrap' }}>
+                          {ev.source_location || 'N/A'}
+                        </td>
+                        <td className="mono" style={{ fontSize: '0.8rem' }}>
+                          {ev.quantitative_value ? (
+                            <div>
+                              <strong>{ev.quantitative_value.metric}</strong>: {ev.quantitative_value.value} {ev.quantitative_value.unit}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-subtle)' }}>Qualitative</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Engine Execution Audit Trail */}
+      {/* TAB 5: MATHEMATICAL AUDIT TRAIL */}
+      {activeTab === 'audit' && (
+        <div>
           <div className="card">
             <div className="card-header">
               <div>

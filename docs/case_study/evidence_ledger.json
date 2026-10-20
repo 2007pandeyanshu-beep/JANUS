@@ -1,0 +1,127 @@
+{
+  "case_study_id": "CS-CAT-001",
+  "system": "Pt/CeO2 Low-Temperature Water-Gas Shift Reaction",
+  "evidence_ledger_version": "1.0.0",
+  "provenance_categories": [
+    "empirical_observation",
+    "author_interpretation",
+    "computational_dft",
+    "unquantified_assumption"
+  ],
+  "claims": [
+    {
+      "claim_id": "CLM-WGS-001",
+      "statement": "At 200°C on Pt/CeO2, the rate of 12C-formate exchange during SSITKA is 5 to 10 times slower than the overall steady-state turnover frequency of CO2 production.",
+      "provenance": "empirical_observation",
+      "source_doi": "10.1016/j.jcat.2011.01.024",
+      "source_citation": "C. M. Kalamaras et al., J. Catal. 279 (2011) 287-300",
+      "source_location": "Section 3.4, Figures 6 and 7, Table 2",
+      "quantitative_value": {
+        "metric": "ratio_formate_rate_to_TOF",
+        "value": 0.14,
+        "range": [0.10, 0.20],
+        "unit": "dimensionless"
+      },
+      "supports_hypotheses": ["H1", "H3"],
+      "refutes_hypotheses": ["H2"],
+      "confidence": 0.95
+    },
+    {
+      "claim_id": "CLM-WGS-002",
+      "statement": "Transient isotopic pulsing of C16O over H218O-treated Pt/CeO2 at 200°C initially yields over 85% C16O2 rather than C16O18O, confirming direct participation of support lattice oxygen.",
+      "provenance": "empirical_observation",
+      "source_doi": "10.1016/j.jcat.2011.01.024",
+      "source_citation": "C. M. Kalamaras et al., J. Catal. 279 (2011) 287-300",
+      "source_location": "Section 3.5, Figure 9",
+      "quantitative_value": {
+        "metric": "initial_C16O2_isotopic_fraction",
+        "value": 0.88,
+        "range": [0.85, 0.92],
+        "unit": "fraction"
+      },
+      "supports_hypotheses": ["H1"],
+      "refutes_hypotheses": ["H2", "H3"],
+      "confidence": 0.92
+    },
+    {
+      "claim_id": "CLM-WGS-003",
+      "statement": "In situ DRIFTS during steady-state WGS reaction shows persistent, intense surface formate bands at 1572 cm^-1, 1370 cm^-1, and 2845 cm^-1.",
+      "provenance": "empirical_observation",
+      "source_doi": "10.1016/j.jcat.2007.09.006",
+      "source_citation": "F. C. Meunier et al., J. Catal. 252 (2007) 18-22",
+      "source_location": "Figure 1, Page 19",
+      "quantitative_value": {
+        "metric": "formate_infrared_coverage",
+        "value": 0.65,
+        "range": [0.50, 0.80],
+        "unit": "monolayer_fraction"
+      },
+      "supports_hypotheses": ["H2"],
+      "refutes_hypotheses": [],
+      "confidence": 0.98
+    },
+    {
+      "claim_id": "CLM-WGS-004",
+      "statement": "Steady-state kinetic isotope effect (KIE = r_H / r_D) on Pt/CeO2 between H2O and D2O is measured at 1.15 to 1.30 across 180°C to 240°C.",
+      "provenance": "empirical_observation",
+      "source_doi": "10.1039/B611217A",
+      "source_citation": "R. Burch, Phys. Chem. Chem. Phys. 8 (2006) 5483-5494",
+      "source_location": "Section 4.2, Table 3",
+      "quantitative_value": {
+        "metric": "kinetic_isotope_effect_rH_rD",
+        "value": 1.22,
+        "range": [1.15, 1.30],
+        "unit": "dimensionless"
+      },
+      "supports_hypotheses": ["H1", "H3"],
+      "refutes_hypotheses": ["H2"],
+      "confidence": 0.90
+    },
+    {
+      "claim_id": "CLM-WGS-005",
+      "statement": "Operando XAS at the Ce L3 edge reveals dynamic reversible Ce3+ reduction fractions between 6% and 12% at the Pt-ceria interface during active WGS catalysis.",
+      "provenance": "empirical_observation",
+      "source_doi": "10.1126/science.1150038",
+      "source_citation": "J. A. Rodriguez et al., Science 318 (2007) 1757-1760",
+      "source_location": "Figure 3, Page 1758",
+      "quantitative_value": {
+        "metric": "interfacial_Ce3_fraction",
+        "value": 0.09,
+        "range": [0.06, 0.12],
+        "unit": "fraction"
+      },
+      "supports_hypotheses": ["H1"],
+      "refutes_hypotheses": ["H2"],
+      "confidence": 0.88
+    },
+    {
+      "claim_id": "CLM-WGS-006",
+      "statement": "Density functional theory (DFT+U) calculations indicate carboxyl (*COOH) formation barrier (0.58 eV) is significantly lower than the uncatalyzed formate decomposition barrier (1.42 eV).",
+      "provenance": "computational_dft",
+      "source_doi": "10.1016/j.jcat.2009.03.013",
+      "source_citation": "C. M. Kalamaras et al., J. Catal. 264 (2009) 117-129",
+      "source_location": "Discussion Section, Page 125",
+      "quantitative_value": {
+        "metric": "dft_activation_barrier_carboxyl_vs_formate",
+        "value": 0.58,
+        "range": [0.50, 0.65],
+        "unit": "eV"
+      },
+      "supports_hypotheses": ["H3"],
+      "refutes_hypotheses": ["H2"],
+      "confidence": 0.85
+    },
+    {
+      "claim_id": "CLM-WGS-007",
+      "statement": "Authors hypothesize that observed formates reside primarily on spectator ceria support sites away from the Pt active perimeter.",
+      "provenance": "author_interpretation",
+      "source_doi": "10.1016/j.jcat.2007.09.006",
+      "source_citation": "F. C. Meunier et al., J. Catal. 252 (2007) 18-22",
+      "source_location": "Concluding Remarks, Page 22",
+      "quantitative_value": null,
+      "supports_hypotheses": ["H1", "H3"],
+      "refutes_hypotheses": ["H2"],
+      "confidence": 0.80
+    }
+  ]
+}

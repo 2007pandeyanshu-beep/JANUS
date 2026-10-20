@@ -1,0 +1,332 @@
+{
+  "case_study_id": "CS-CAT-001",
+  "experiments": [
+    {
+      "id": "EXP-WGS-01",
+      "name": "SSITKA Operando DRIFTS (12CO to 13CO Formate Exchange)",
+      "description": "Steady-State Isotopic Transient Kinetic Analysis swapping 12CO for 13CO while monitoring the decay of 12C-formates vs production of 13CO2 via operando DRIFTS-MS at 200°C.",
+      "quantification_status": "QUANTIFIED_BAYESIAN",
+      "possible_outcomes": [
+        "Formate_Decay_Matches_TOF",
+        "Formate_Decay_Much_Slower_Than_TOF"
+      ],
+      "predictions": [
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Formate_Decay_Matches_TOF",
+          "probability": 0.04,
+          "uncertainty": 0.02,
+          "basis": "In Redox mechanism, reaction bypasses formates entirely; surface formates are spectators and exchange much slower than TOF."
+        },
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Formate_Decay_Much_Slower_Than_TOF",
+          "probability": 0.96,
+          "uncertainty": 0.02,
+          "basis": "Matches empirical observation from Kalamaras et al. (2011) Table 2."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Formate_Decay_Matches_TOF",
+          "probability": 0.94,
+          "uncertainty": 0.03,
+          "basis": "If formates are the primary intermediate, their consumption rate must balance the steady-state CO2 turnover frequency."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Formate_Decay_Much_Slower_Than_TOF",
+          "probability": 0.06,
+          "uncertainty": 0.03,
+          "basis": "Small probability account for minority slow-exchange pools."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Formate_Decay_Matches_TOF",
+          "probability": 0.05,
+          "uncertainty": 0.02,
+          "basis": "Under carboxyl mechanism, formates are spectator pools; exchange rate does not match catalytic turnover."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Formate_Decay_Much_Slower_Than_TOF",
+          "probability": 0.95,
+          "uncertainty": 0.02,
+          "basis": "Consistent with carboxyl pathway prediction where reaction flux bypasses formate reservoir."
+        }
+      ],
+      "cost": 1.5,
+      "feasibility": 0.92,
+      "is_feasible": true,
+      "assumptions": [
+        "Negligible gas-phase holdup dispersion in transient cell (<0.5 s dead time)",
+        "Linear relationship between DRIFTS peak area and surface formate coverage"
+      ],
+      "source_evidence_ids": ["CLM-WGS-001", "CLM-WGS-003"]
+    },
+    {
+      "id": "EXP-WGS-02",
+      "name": "Transient H2(18O) / C(16O) Isotopic Pulse Mass Spectrometry",
+      "description": "Pre-equilibrate catalyst in H2(18O), then pulse C(16O) and measure mass-to-charge ratios m/z 44 (C16O2), m/z 46 (C16O18O), and m/z 48 (C18O2) to determine the origin of oxygen in initial CO2 product.",
+      "quantification_status": "QUANTIFIED_BAYESIAN",
+      "possible_outcomes": [
+        "Initial_CO2_Mainly_Lattice_16O",
+        "Initial_CO2_Mainly_Mixed_18O"
+      ],
+      "predictions": [
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Initial_CO2_Mainly_Lattice_16O",
+          "probability": 0.92,
+          "uncertainty": 0.04,
+          "basis": "In Mars-van Krevelen redox, CO abstracts native support lattice oxygen (16O) leaving a vacancy, before 18O replenishes it."
+        },
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Initial_CO2_Mainly_Mixed_18O",
+          "probability": 0.08,
+          "uncertainty": 0.04,
+          "basis": "Surface 18O exchange prior to pulse."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Initial_CO2_Mainly_Lattice_16O",
+          "probability": 0.08,
+          "uncertainty": 0.03,
+          "basis": "Associative mechanism requires OH from water; if water is 18O-labeled, initial product must be C16O18O."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Initial_CO2_Mainly_Mixed_18O",
+          "probability": 0.92,
+          "uncertainty": 0.03,
+          "basis": "Direct coupling with 18O-hydroxyls yields C16O18O."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Initial_CO2_Mainly_Lattice_16O",
+          "probability": 0.12,
+          "uncertainty": 0.04,
+          "basis": "Active carboxyl from 18O-hydroxyls yields C16O18O."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Initial_CO2_Mainly_Mixed_18O",
+          "probability": 0.88,
+          "uncertainty": 0.04,
+          "basis": "Direct carboxyl pathway incorporates oxygen from dissociated water (18O)."
+        }
+      ],
+      "cost": 1.8,
+      "feasibility": 0.88,
+      "is_feasible": true,
+      "assumptions": [
+        "18O isotopic purity of water precursor >= 97%",
+        "Rapid baseline stabilization without pre-reduction artifacts"
+      ],
+      "source_evidence_ids": ["CLM-WGS-002"]
+    },
+    {
+      "id": "EXP-WGS-03",
+      "name": "Operando Ambient-Pressure Ce L3-edge XAS (Ce3+ Vacancy Tracking)",
+      "description": "Synchrotron X-ray absorption spectroscopy measuring the Ce3+ / Ce4+ edge shift under steady-state reaction conditions (200°C, 1 bar CO/H2O mix) to quantify dynamic oxygen vacancies.",
+      "quantification_status": "QUANTIFIED_BAYESIAN",
+      "possible_outcomes": [
+        "Ce3_Vacancy_Modulation_Detected",
+        "No_Ce3_Modulation_Static_Support"
+      ],
+      "predictions": [
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Ce3_Vacancy_Modulation_Detected",
+          "probability": 0.89,
+          "uncertainty": 0.05,
+          "basis": "Redox cycle continuously generates and fills oxygen vacancies at Pt-ceria perimeter, establishing measurable steady-state Ce3+ concentration."
+        },
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "No_Ce3_Modulation_Static_Support",
+          "probability": 0.11,
+          "uncertainty": 0.05,
+          "basis": "Signal attenuation in thick catalysts."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Ce3_Vacancy_Modulation_Detected",
+          "probability": 0.15,
+          "uncertainty": 0.04,
+          "basis": "Minor background reduction."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "No_Ce3_Modulation_Static_Support",
+          "probability": 0.85,
+          "uncertainty": 0.04,
+          "basis": "Pure associative mechanism does not rely on lattice vacancy generation; ceria acts as static hydroxyl donor."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Ce3_Vacancy_Modulation_Detected",
+          "probability": 0.25,
+          "uncertainty": 0.05,
+          "basis": "Slight vacancy modulation near Pt perimeter."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "No_Ce3_Modulation_Static_Support",
+          "probability": 0.75,
+          "uncertainty": 0.05,
+          "basis": "Associative carboxyl route primarily involves surface hydroxyl groups without extensive lattice oxygen turnover."
+        }
+      ],
+      "cost": 6.5,
+      "feasibility": 0.70,
+      "is_feasible": true,
+      "assumptions": [
+        "Synchrotron beamline allocation available",
+        "AP-XAS reaction cell windows withstand 1 bar reaction pressure at 200°C"
+      ],
+      "source_evidence_ids": ["CLM-WGS-005"]
+    },
+    {
+      "id": "EXP-WGS-04",
+      "name": "Steady-State H2O / D2O Kinetic Isotope Effect (KIE: r_H / r_D)",
+      "description": "Measure steady-state catalytic reaction rate with H2O vs D2O at 200°C to determine primary vs secondary kinetic isotope effect.",
+      "quantification_status": "QUANTIFIED_BAYESIAN",
+      "possible_outcomes": [
+        "KIE_Modest_Below_1.4",
+        "KIE_Large_Above_1.8"
+      ],
+      "predictions": [
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "KIE_Modest_Below_1.4",
+          "probability": 0.91,
+          "uncertainty": 0.04,
+          "basis": "Redox rate-determining step is CO reduction of lattice oxygen; water re-oxidation step is fast, yielding modest secondary KIE (1.1-1.3)."
+        },
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "KIE_Large_Above_1.8",
+          "probability": 0.09,
+          "uncertainty": 0.04,
+          "basis": "Experimental error / transport limitation."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "KIE_Modest_Below_1.4",
+          "probability": 0.10,
+          "uncertainty": 0.03,
+          "basis": "Unexpected for C-H bond cleavage."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "KIE_Large_Above_1.8",
+          "probability": 0.90,
+          "uncertainty": 0.03,
+          "basis": "Formate decomposition involves C-H (or C-D) bond scission in the rate-determining step, producing a pronounced primary KIE (>= 1.8)."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "KIE_Modest_Below_1.4",
+          "probability": 0.72,
+          "uncertainty": 0.05,
+          "basis": "Carboxyl decomposition involves O-H bond cleavage with moderate theoretical KIE (1.2-1.5)."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "KIE_Large_Above_1.8",
+          "probability": 0.28,
+          "uncertainty": 0.05,
+          "basis": "Possible transition state isotope effects."
+        }
+      ],
+      "cost": 1.1,
+      "feasibility": 0.96,
+      "is_feasible": true,
+      "assumptions": [
+        "D2O isotopic purity >= 99.8%",
+        "Differential conversion regime maintained (<10% conversion) to avoid thermodynamic back-reaction"
+      ],
+      "source_evidence_ids": ["CLM-WGS-004"]
+    },
+    {
+      "id": "EXP-WGS-05",
+      "name": "Operando Sub-Second Stopped-Flow Carboxyl Detection (Proposed)",
+      "description": "Sub-second rapid-scan ATR-SEIRAS targeting transient carboxyl (*COOH) stretching bands at 1690 cm^-1.",
+      "quantification_status": "UNQUANTIFIED_NEEDS_MEASUREMENT",
+      "possible_outcomes": [
+        "Transient_Carboxyl_Band_Resolved",
+        "Band_Below_Detection_Limit"
+      ],
+      "predictions": [],
+      "cost": 4.5,
+      "feasibility": 0.45,
+      "is_feasible": true,
+      "assumptions": [
+        "Unquantified in current published literature: *COOH lifetime is estimated at <10 microseconds, below current signal-to-noise ratio."
+      ],
+      "source_evidence_ids": ["CLM-WGS-006"]
+    },
+    {
+      "id": "EXP-WGS-06",
+      "name": "Non-Catalytic Quartz Reactor Blank (Negative Control)",
+      "description": "Blank quartz reactor tube run at 200°C under identical WGS gas mixture without catalyst.",
+      "quantification_status": "QUANTIFIED_BAYESIAN",
+      "possible_outcomes": [
+        "Zero_Conversion_Detected",
+        "Measurable_Thermal_Conversion"
+      ],
+      "predictions": [
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Zero_Conversion_Detected",
+          "probability": 0.999,
+          "uncertainty": 0.001,
+          "basis": "Gas-phase homogeneous WGS has zero activity at 200°C."
+        },
+        {
+          "hypothesis_id": "H1",
+          "outcome_label": "Measurable_Thermal_Conversion",
+          "probability": 0.001,
+          "uncertainty": 0.001,
+          "basis": "Detector noise artifact."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Zero_Conversion_Detected",
+          "probability": 0.999,
+          "uncertainty": 0.001,
+          "basis": "Identical negative outcome across all hypotheses."
+        },
+        {
+          "hypothesis_id": "H2",
+          "outcome_label": "Measurable_Thermal_Conversion",
+          "probability": 0.001,
+          "uncertainty": 0.001,
+          "basis": "Detector noise artifact."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Zero_Conversion_Detected",
+          "probability": 0.999,
+          "uncertainty": 0.001,
+          "basis": "Identical negative outcome across all hypotheses."
+        },
+        {
+          "hypothesis_id": "H3",
+          "outcome_label": "Measurable_Thermal_Conversion",
+          "probability": 0.001,
+          "uncertainty": 0.001,
+          "basis": "Detector noise artifact."
+        }
+      ],
+      "cost": 0.3,
+      "feasibility": 1.0,
+      "is_feasible": true,
+      "assumptions": [
+        "Quartz reactor tube is acid-washed to eliminate metallic contamination"
+      ],
+      "source_evidence_ids": []
+    }
+  ]
+}
