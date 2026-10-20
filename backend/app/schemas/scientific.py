@@ -332,7 +332,9 @@ class PolicyCampaignSummary(BaseModel):
     target_confidence_achieved: bool
     termination_reason: str
     runtime_ms: float
-    regret_vs_oracle_utility: float
+    regret_vs_oracle_utility: float = Field(..., description="Legacy regret field; now reports regret against offline combinatorial optimal")
+    regret_vs_offline_optimal: float = Field(default=0.0, description="True non-negative regret vs offline combinatorial upper bound")
+    signed_delta_vs_privileged: float = Field(default=0.0, description="Signed difference: privileged_greedy_ig - policy_ig")
 
 
 class BEDPolicyComparisonReport(BaseModel):
@@ -344,5 +346,8 @@ class BEDPolicyComparisonReport(BaseModel):
     seed: int
     budget: float
     confidence_threshold: float
+    offline_optimal_ig_bits: float = Field(default=0.0, description="Global maximum realized IG achievable by any budget-admissible subset")
+    offline_optimal_subset: List[str] = Field(default_factory=list, description="IDs of experiments in optimal subset")
+    offline_optimal_cost: float = Field(default=0.0, description="Cost of optimal subset")
     policy_summaries: List[PolicyCampaignSummary]
     summary_verdict: str

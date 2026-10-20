@@ -895,7 +895,7 @@ export const App: React.FC = () => {
                     <option value="cheapest">Naive Cost-Minimization</option>
                     <option value="feasibility">Naive Feasibility-Maximization</option>
                     <option value="uniform_random">Uniform Random Baseline</option>
-                    <option value="oracle">Idealized Omniscient Oracle</option>
+                    <option value="privileged_greedy">Privileged Greedy (H*-Informed)</option>
                   </select>
                 </div>
 
@@ -1136,6 +1136,16 @@ export const App: React.FC = () => {
                 <span className="badge badge-emerald">6 POLICIES EVALUATED</span>
               </div>
 
+              {bedCompareResult.offline_optimal_ig_bits !== undefined && (
+                <div style={{ margin: '0 16px 12px 16px', padding: '10px 14px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                  <strong>True Offline Combinatorial Upper Bound:</strong>{' '}
+                  <span className="mono" style={{ color: '#0369a1', fontWeight: 600 }}>
+                    {bedCompareResult.offline_optimal_ig_bits.toFixed(4)} bits
+                  </span>{' '}
+                  (Optimal Subset: {bedCompareResult.offline_optimal_subset?.join(', ')}, Cost: {bedCompareResult.offline_optimal_cost?.toFixed(1)})
+                </div>
+              )}
+
               <div className="table-container">
                 <table>
                   <thead>
@@ -1148,7 +1158,7 @@ export const App: React.FC = () => {
                       <th>Failures</th>
                       <th>0-EIG Picks</th>
                       <th>Target Met?</th>
-                      <th>Regret vs Oracle</th>
+                      <th>Regret (Offline Opt.)</th>
                       <th>Runtime</th>
                     </tr>
                   </thead>
@@ -1184,7 +1194,7 @@ export const App: React.FC = () => {
                               {s.target_confidence_achieved ? 'YES' : 'NO'}
                             </span>
                           </td>
-                          <td className="mono">{s.regret_vs_oracle_utility.toFixed(4)}</td>
+                          <td className="mono">{(s.regret_vs_offline_optimal ?? s.regret_vs_oracle_utility).toFixed(4)}</td>
                           <td className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{s.runtime_ms.toFixed(1)} ms</td>
                         </tr>
                       );

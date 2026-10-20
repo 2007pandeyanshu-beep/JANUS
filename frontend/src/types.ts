@@ -178,6 +178,8 @@ export interface PolicyCampaignSummary {
   termination_reason: string;
   runtime_ms: number;
   regret_vs_oracle_utility: number;
+  regret_vs_offline_optimal?: number;
+  signed_delta_vs_privileged?: number;
 }
 
 export interface BEDPolicyComparisonReport {
@@ -189,6 +191,9 @@ export interface BEDPolicyComparisonReport {
   seed: number;
   budget: number;
   confidence_threshold: number;
+  offline_optimal_ig_bits?: number;
+  offline_optimal_subset?: string[];
+  offline_optimal_cost?: number;
   policy_summaries: PolicyCampaignSummary[];
   summary_verdict: string;
 }

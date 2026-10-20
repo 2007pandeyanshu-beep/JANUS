@@ -43,20 +43,62 @@ class Nature:
     """
     Simulation Environment ("Nature").
     
+    COUNTERFACTUAL REALIZATION FAIRNESS:
+    - Pre-generates deterministic physical execution outcomes (feasibility Bernoulli trial
+      and conditional categorical outcome draw) for every candidate experiment in the pool
+      under the given seed.
+    - Guarantees that if an assay is executed at step 1 by Policy A or at step 4 by Policy B,
+      it encounters the identical physical reality under the same seed.
+    - Completely eliminates RNG stream coupling and evaluation drift across policies.
+    
     ISOLATION INVARIANT:
     - Holds the hidden ground-truth hypothesis H*.
     - NEVER exposes H* to the decision policy during experiment selection.
     - Generates physical feasibility failures and observable outcomes.
     """
-    def __init__(self, hidden_hypothesis_id: str, rng: np.random.Generator):
+    def __init__(
+        self,
+        hidden_hypothesis_id: str,
+        rng: np.random.Generator,
+        candidate_experiments: Optional[List[Experiment]] = None,
+        likelihood_matrices: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
+    ):
         self._hidden_hypothesis_id = hidden_hypothesis_id
         self._rng = rng
+        self._counterfactual_realizations: Dict[str, Tuple[bool, Optional[str]]] = {}
+        
+        # Pre-sample counterfactual realizations if candidates provided
+        if candidate_experiments and likelihood_matrices:
+            # Sort candidates canonically by id to ensure deterministic order across runs
+            sorted_candidates = sorted(candidate_experiments, key=lambda e: e.id)
+            for exp in sorted_candidates:
+                p_feas = float(min(max(exp.feasibility, 0.0), 1.0))
+                is_successful = bool(self._rng.random() < p_feas)
+                if not is_successful:
+                    self._counterfactual_realizations[exp.id] = (False, None)
+                    continue
+                
+                h_likelihoods = likelihood_matrices.get(exp.id, {}).get(hidden_hypothesis_id, {})
+                outcomes = exp.possible_outcomes
+                probs = np.array([float(h_likelihoods.get(y, 0.0)) for y in outcomes], dtype=np.float64)
+                prob_sum = probs.sum()
+                if prob_sum <= 1e-12:
+                    probs = np.ones(len(outcomes)) / len(outcomes)
+                else:
+                    probs = probs / prob_sum
+                sampled_idx = self._rng.choice(len(outcomes), p=probs)
+                self._counterfactual_realizations[exp.id] = (True, outcomes[sampled_idx])
         
     @property
     def hidden_hypothesis_id(self) -> str:
         """Accessed only by evaluation reports and audit logs outside policy selection."""
         return self._hidden_hypothesis_id
         
+    @property
+    def counterfactual_realizations(self) -> Dict[str, Tuple[bool, Optional[str]]]:
+        """Provides read-only access for offline upper bound computation."""
+        return dict(self._counterfactual_realizations)
+
     def execute_experiment(
         self,
         experiment: Experiment,
@@ -64,12 +106,15 @@ class Nature:
     ) -> Tuple[bool, Optional[str]]:
         """
         Simulates physical execution of candidate assay in the real world:
-        1. Feasibility check: F ~ Bernoulli(feasibility)
-        2. If F=1: outcome y ~ Categorical(P(y | H*, e))
+        1. Uses pre-sampled counterfactual realization if available (guaranteeing inter-policy fairness).
+        2. Falls back to stream generation for unseeded dynamic experiments.
         
         Returns:
             (is_successful: bool, observed_outcome: Optional[str])
         """
+        if experiment.id in self._counterfactual_realizations:
+            return self._counterfactual_realizations[experiment.id]
+            
         p_feas = float(min(max(experiment.feasibility, 0.0), 1.0))
         is_successful = bool(self._rng.random() < p_feas)
         
@@ -198,17 +243,18 @@ def select_candidate_experiment(
         rationale = f"Selected '{chosen_exp.name}' via uniform random baseline choice (1/{len(available_experiments)})."
         return chosen_exp, chosen_score, rationale
         
-    elif policy_name == "oracle":
-        # Oracle policy: computes expected realized entropy reduction under true H*
+    elif policy_name in ("privileged_greedy", "oracle"):
+        # Privileged Greedy Policy (H*-Informed): computes expected realized entropy reduction under true H*
+        # NOTE: This is a 1-step myopic heuristic with access to H*, NOT a multi-step combinatorial upper bound.
         h_star = oracle_hidden_hypothesis_id
         if not h_star:
             # Fallback to utility if oracle ID omitted
             top_score = ranked_scores[0]
-            return exp_by_id[top_score.experiment_id], top_score, "Oracle fallback to utility."
+            return exp_by_id[top_score.experiment_id], top_score, "Privileged greedy fallback to utility."
             
         prior_entropy = compute_shannon_entropy(list(current_prior.values()))
         
-        def oracle_score_candidate(s: ExperimentScore) -> Tuple[float, float, float]:
+        def privileged_score_candidate(s: ExperimentScore) -> Tuple[float, float, float]:
             exp = exp_by_id[s.experiment_id]
             l_matrix = likelihood_matrices[exp.id]
             h_probs = l_matrix.get(h_star, {})
@@ -225,9 +271,9 @@ def select_candidate_experiment(
             oracle_utility = (exp.feasibility * expected_reduction) / (1.0 + cost_weight * exp.cost)
             return (oracle_utility, expected_reduction, -exp.cost)
             
-        best_score = max(ranked_scores, key=oracle_score_candidate)
+        best_score = max(ranked_scores, key=privileged_score_candidate)
         chosen_exp = exp_by_id[best_score.experiment_id]
-        rationale = f"Selected '{chosen_exp.name}' maximizing omniscient Oracle expected reduction under H*={h_star}."
+        rationale = f"Selected '{chosen_exp.name}' via Privileged Greedy heuristic (1-step expected reduction under H*={h_star})."
         return chosen_exp, best_score, rationale
         
     else:
@@ -289,8 +335,15 @@ class SequentialBEDEngine:
             raise ScientificValidationError("No quantified candidate experiments available for sequential BED.")
             
         # 3. Initialize Nature simulation environment and RNG
-        rng = np.random.default_rng(input_params.seed)
-        nature = Nature(hidden_hypothesis_id=hidden_h_id, rng=rng)
+        nature_rng = np.random.default_rng(input_params.seed)
+        nature = Nature(
+            hidden_hypothesis_id=hidden_h_id,
+            rng=nature_rng,
+            candidate_experiments=quantified_exps,
+            likelihood_matrices=likelihood_matrices
+        )
+        # Dedicated policy RNG decoupled from Nature simulation
+        policy_rng = np.random.default_rng(input_params.seed + 9999)
         
         # 4. Initialize sequential campaign state
         current_prior = dict(normalized_priors)
@@ -335,6 +388,7 @@ class SequentialBEDEngine:
                     break
                     
             # Select candidate according to policy (without exposing H*)
+            is_privileged = input_params.policy in ("privileged_greedy", "oracle")
             chosen_exp, chosen_score, rationale = select_candidate_experiment(
                 policy_name=input_params.policy,
                 available_experiments=available_candidates,
@@ -342,8 +396,8 @@ class SequentialBEDEngine:
                 likelihood_matrices=likelihood_matrices,
                 current_prior=current_prior,
                 cost_weight=input_params.cost_weight,
-                rng=rng,
-                oracle_hidden_hypothesis_id=nature.hidden_hypothesis_id if input_params.policy == "oracle" else None
+                rng=policy_rng,
+                oracle_hidden_hypothesis_id=nature.hidden_hypothesis_id if is_privileged else None
             )
             
             # Check stopping condition 4: Budget exhausted
@@ -364,8 +418,8 @@ class SequentialBEDEngine:
                         likelihood_matrices=likelihood_matrices,
                         current_prior=current_prior,
                         cost_weight=input_params.cost_weight,
-                        rng=rng,
-                        oracle_hidden_hypothesis_id=nature.hidden_hypothesis_id if input_params.policy == "oracle" else None
+                        rng=policy_rng,
+                        oracle_hidden_hypothesis_id=nature.hidden_hypothesis_id if is_privileged else None
                     )
                     
             # Track zero EIG selections (waste rate)
@@ -391,7 +445,9 @@ class SequentialBEDEngine:
                     likelihood_matrix=likelihood_matrices[chosen_exp.id]
                 )
                 post_entropy = compute_shannon_entropy(list(updated_posterior.values()))
-                realized_ig = max(prior_entropy - post_entropy, 0.0)
+                # Realized information gain is signed entropy reduction: Delta H = H(P_{t-1}) - H(P_t)
+                # Preserving sign ensures telescoping sum sum(Delta H_t) == H(P_0) - H(P_T)
+                realized_ig = prior_entropy - post_entropy
             else:
                 # Execution failure: experiment aborted due to feasibility barrier
                 execution_status = "EXECUTION_FAILURE"
@@ -471,3 +527,59 @@ class SequentialBEDEngine:
             uninformative_selection_count=uninformative_selections,
             warnings=warnings
         )
+
+
+def compute_offline_combinatorial_upper_bound(
+    scenario: AnalysisInput,
+    quantified_experiments: List[Experiment],
+    likelihood_matrices: Dict[str, Dict[str, Dict[str, float]]],
+    initial_priors: Dict[str, float],
+    nature: Nature,
+    budget: float
+) -> Tuple[float, List[str], float, Dict[str, float]]:
+    """
+    Computes the true global offline combinatorial upper bound on realized information gain
+    for the exact physical realization generated by Nature under the given seed.
+    
+    Considers all 2^N subsets of candidate experiments:
+    1. Filters to subsets S where sum_{e in S} cost(e) <= budget.
+    2. Simulates Bayesian posterior updates for all successful executions in S.
+    3. Computes realized information gain Delta H(S) = H(P_0) - H(P_final).
+    4. Returns max_{S} Delta H(S), optimal subset, cost, and final posterior.
+    
+    Guarantees: Delta H_realized(pi) <= O*_offline for ALL sequential policies pi.
+    """
+    import itertools
+    
+    p0_entropy = compute_shannon_entropy(list(initial_priors.values()))
+    realizations = nature.counterfactual_realizations
+    
+    best_ig = 0.0
+    best_subset: List[str] = []
+    best_cost = 0.0
+    best_posterior = dict(initial_priors)
+    
+    for r in range(1, len(quantified_experiments) + 1):
+        for subset in itertools.combinations(quantified_experiments, r):
+            total_cost = sum(e.cost for e in subset)
+            if total_cost <= budget + 1e-9:
+                post = dict(initial_priors)
+                for exp in subset:
+                    is_succ, outcome = realizations.get(exp.id, (True, None))
+                    if is_succ and outcome:
+                        post = compute_bayesian_posterior_update(
+                            post,
+                            outcome,
+                            likelihood_matrices[exp.id]
+                        )
+                post_entropy = compute_shannon_entropy(list(post.values()))
+                realized_ig = max(p0_entropy - post_entropy, 0.0)
+                
+                # Maximize realized IG, tie-break by lower cost
+                if realized_ig > best_ig + 1e-6 or (abs(realized_ig - best_ig) <= 1e-6 and total_cost < best_cost):
+                    best_ig = realized_ig
+                    best_subset = [e.id for e in subset]
+                    best_cost = total_cost
+                    best_posterior = post
+                    
+    return round(best_ig, 4), best_subset, round(best_cost, 2), best_posterior

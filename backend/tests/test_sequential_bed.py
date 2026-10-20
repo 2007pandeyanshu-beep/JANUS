@@ -267,7 +267,7 @@ def test_unquantified_assay_excluded_from_campaign():
 
 
 def test_sequential_policy_comparison():
-    """Verifies that comparative benchmark runs across all 6 policies cleanly."""
+    """Verifies that comparative benchmark runs across all 6 policies cleanly and computes offline optimal."""
     scenario = get_wgs_case_study_scenario()
     report = run_sequential_policy_comparison(
         scenario=scenario,
@@ -285,8 +285,143 @@ def test_sequential_policy_comparison():
     assert "cheapest" in policy_keys
     assert "feasibility" in policy_keys
     assert "uniform_random" in policy_keys
-    assert "oracle" in policy_keys
+    assert "privileged_greedy" in policy_keys
     
-    # Oracle regret should be 0.0
-    oracle_summary = next(s for s in report.policy_summaries if s.policy_key == "oracle")
-    assert oracle_summary.regret_vs_oracle_utility == 0.0
+    # Offline optimal bound must be populated and >= all policy realized IG
+    assert report.offline_optimal_ig_bits > 0.0
+    for s in report.policy_summaries:
+        assert s.regret_vs_offline_optimal >= 0.0
+
+
+def test_counterfactual_execution_fairness():
+    """
+    Verifies that Nature pre-samples physical reality so that an experiment
+    experiences the exact same outcome regardless of which policy selects it
+    or at what step order it is executed under the same seed.
+    """
+    scenario = get_wgs_case_study_scenario()
+    
+    res_janus = SequentialBEDEngine.run_campaign(
+        scenario,
+        BEDCampaignInput(scenario_id="CS-CAT-001", policy="janus_utility", seed=42, budget=10.0)
+    )
+    res_cheapest = SequentialBEDEngine.run_campaign(
+        scenario,
+        BEDCampaignInput(scenario_id="CS-CAT-001", policy="cheapest", seed=42, budget=10.0)
+    )
+    
+    janus_outcomes = {s.selected_experiment_id: (s.simulated_is_successful, s.observed_outcome) for s in res_janus.steps}
+    cheapest_outcomes = {s.selected_experiment_id: (s.simulated_is_successful, s.observed_outcome) for s in res_cheapest.steps}
+    
+    common_exps = set(janus_outcomes.keys()).intersection(set(cheapest_outcomes.keys()))
+    assert len(common_exps) >= 2  # EXP-WGS-01 and EXP-WGS-02 are common
+    for exp_id in common_exps:
+        assert janus_outcomes[exp_id] == cheapest_outcomes[exp_id], (
+            f"Counterfactual drift detected for {exp_id}: "
+            f"JANUS={janus_outcomes[exp_id]} vs Cheapest={cheapest_outcomes[exp_id]}"
+        )
+
+
+def test_offline_combinatorial_upper_bound_optimality():
+    """
+    Verifies that the True Offline Combinatorial Upper Bound strictly bounds
+    all sequential policies (O*_offline >= realized_ig for all pi) and produces
+    non-negative regret (regret >= 0.0) across seeds.
+    """
+    scenario = get_wgs_case_study_scenario()
+    for test_seed in [42, 101, 777]:
+        report = run_sequential_policy_comparison(
+            scenario=scenario,
+            hidden_hypothesis_id="H1",
+            seed=test_seed,
+            budget=10.0,
+            max_steps=6,
+            confidence_threshold=0.95
+        )
+        assert report.offline_optimal_ig_bits > 0.0
+        assert len(report.offline_optimal_subset) > 0
+        assert report.offline_optimal_cost <= 10.0
+        
+        for s in report.policy_summaries:
+            assert s.total_realized_ig_bits <= report.offline_optimal_ig_bits + 1e-6, (
+                f"Policy {s.policy_key} exceeded offline upper bound: "
+                f"{s.total_realized_ig_bits} > {report.offline_optimal_ig_bits}"
+            )
+            assert s.regret_vs_offline_optimal >= 0.0
+
+
+def test_privileged_greedy_myopia_demonstration():
+    """
+    Verifies that Privileged Greedy (1-step myopic with H* knowledge) does not
+    solve the multi-step combinatorial knapsack problem and can achieve strictly
+    lower realized information gain than the offline combinatorial upper bound.
+    """
+    scenario = get_wgs_case_study_scenario()
+    report = run_sequential_policy_comparison(
+        scenario=scenario,
+        hidden_hypothesis_id="H1",
+        seed=42,
+        budget=10.0,
+        max_steps=6
+    )
+    priv_summary = next(s for s in report.policy_summaries if s.policy_key == "privileged_greedy")
+    assert priv_summary.total_realized_ig_bits <= report.offline_optimal_ig_bits
+    assert priv_summary.regret_vs_offline_optimal > 0.0
+
+
+def test_multihypothesis_consistency():
+    """
+    Verifies that sequential campaigns execute cleanly under all competing hypotheses
+    (H1, H2, H3) and preserve isolation and Bayesian consistency.
+    """
+    scenario = get_wgs_case_study_scenario()
+    for h_id in ["H1", "H2", "H3"]:
+        res = SequentialBEDEngine.run_campaign(
+            scenario,
+            BEDCampaignInput(scenario_id="CS-CAT-001", policy="janus_utility", hidden_hypothesis_id=h_id, seed=42, budget=10.0)
+        )
+        assert res.hidden_hypothesis_id == h_id
+        assert res.total_steps >= 1
+        assert res.total_cost <= 10.0
+        assert 0.0 <= res.final_confidence_in_hidden_hypothesis <= 1.0
+
+
+def test_step_history_and_summary_consistency():
+    """
+    Verifies internal mathematical consistency between step-by-step history
+    and campaign-level summary aggregates.
+    """
+    scenario = get_wgs_case_study_scenario()
+    res = SequentialBEDEngine.run_campaign(
+        scenario,
+        BEDCampaignInput(scenario_id="CS-CAT-001", policy="janus_utility", seed=42, budget=10.0)
+    )
+    # Sum of step costs must match total_cost
+    step_cost_sum = sum(s.step_cost for s in res.steps)
+    assert res.total_cost == pytest.approx(step_cost_sum, abs=1e-4)
+    
+    # Cumulative cost on last step must equal total_cost
+    assert res.steps[-1].cumulative_cost == pytest.approx(res.total_cost, abs=1e-4)
+    
+    # Sum of realized IG must match total_realized_information_gain
+    step_ig_sum = sum(s.realized_information_gain for s in res.steps)
+    assert res.total_realized_information_gain == pytest.approx(step_ig_sum, abs=1e-4)
+    
+    # Final step posterior must match final_posterior
+    assert res.steps[-1].posterior_distribution == res.final_posterior
+
+
+def test_oracle_backward_compatibility_alias():
+    """Confirms that 'oracle' policy string works as an alias for privileged_greedy."""
+    scenario = get_wgs_case_study_scenario()
+    res_oracle = SequentialBEDEngine.run_campaign(
+        scenario,
+        BEDCampaignInput(scenario_id="CS-CAT-001", policy="oracle", seed=42, budget=10.0)
+    )
+    res_priv = SequentialBEDEngine.run_campaign(
+        scenario,
+        BEDCampaignInput(scenario_id="CS-CAT-001", policy="privileged_greedy", seed=42, budget=10.0)
+    )
+    assert res_oracle.total_steps == res_priv.total_steps
+    assert res_oracle.total_cost == res_priv.total_cost
+    assert res_oracle.total_realized_information_gain == res_priv.total_realized_information_gain
