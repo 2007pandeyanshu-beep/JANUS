@@ -58,6 +58,8 @@ def evaluate_experiment_information_gain(
             experiment_id=experiment.id,
             experiment_name=experiment.name,
             rank=999,
+            utility_rank=999,
+            eig_rank=999,
             prior_entropy=round(prior_entropy, 6),
             expected_posterior_entropy=round(prior_entropy, 6),
             expected_information_gain=0.0,
@@ -152,6 +154,8 @@ def evaluate_experiment_information_gain(
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         rank=1,  # Assigned after sorting
+        utility_rank=1,
+        eig_rank=1,
         prior_entropy=round(prior_entropy, 6),
         expected_posterior_entropy=round(expected_posterior_entropy, 6),
         expected_information_gain=round(eig, 6),
@@ -177,12 +181,15 @@ def rank_experiments(
 ) -> List[ExperimentScore]:
     """
     Scores and deterministically ranks all candidate experiments.
-    Sorting precedence:
-    1. composite_utility_score (descending)
-    2. expected_information_gain (descending)
-    3. feasibility (descending)
-    4. cost (ascending)
-    5. experiment_id (lexicographic tie-break for strict determinism)
+    
+    Assigns two separate deterministic rankings:
+    1. EIG Rank (eig_rank): Ordered strictly by expected information gain (bits).
+       Tie-breaks: feasibility (desc), cost (asc), experiment_id (asc).
+    2. Utility Rank (utility_rank / rank): Ordered by composite utility score
+       U(e) = Feasibility * [EIG / (1 + alpha * Cost)].
+       Tie-breaks: EIG (desc), feasibility (desc), cost (asc), experiment_id (asc).
+       
+    The returned list is ordered by Utility Rank (primary JANUS policy).
     """
     scores: List[ExperimentScore] = []
     
@@ -195,7 +202,19 @@ def rank_experiments(
         )
         scores.append(score)
     
-    # Deterministic multi-key sort
+    # 1. Assign deterministic EIG rank (pure information gain)
+    scores.sort(
+        key=lambda s: (
+            -s.expected_information_gain,
+            -s.feasibility,
+            s.cost,
+            s.experiment_id
+        )
+    )
+    for idx, s in enumerate(scores, start=1):
+        s.eig_rank = idx
+    
+    # 2. Assign deterministic Composite Utility rank (primary multi-criteria objective)
     scores.sort(
         key=lambda s: (
             -s.composite_utility_score,
@@ -205,9 +224,8 @@ def rank_experiments(
             s.experiment_id
         )
     )
-    
-    # Assign sequential ranks
     for idx, s in enumerate(scores, start=1):
+        s.utility_rank = idx
         s.rank = idx
         
     return scores

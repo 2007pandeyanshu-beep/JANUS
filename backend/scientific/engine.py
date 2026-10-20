@@ -86,6 +86,8 @@ class ScientificEngine:
                         experiment_id=exp.id,
                         experiment_name=exp.name,
                         rank=None,
+                        utility_rank=None,
+                        eig_rank=None,
                         quantification_status="UNQUANTIFIED_NEEDS_MEASUREMENT",
                         prior_entropy=round(prior_entropy, 6),
                         expected_posterior_entropy=round(prior_entropy, 6),

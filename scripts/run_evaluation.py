@@ -17,7 +17,7 @@ from evaluation.benchmark_evaluation import run_reproducible_benchmark
 
 def main():
     print("=" * 84)
-    print(" JANUS STATISTICAL BENCHMARK EVALUATION (PHASE 3.1 AUDIT)")
+    print(" JANUS STATISTICAL BENCHMARK EVALUATION (PHASE 3.2 AUDIT)")
     print(" Benchmark ID: BENCH-WGS-001 | Case Study: CS-CAT-001 (Pt/CeO2 WGS Catalysis)")
     print("=" * 84)
     
@@ -31,10 +31,16 @@ def main():
         print(f"    {v}")
     
     print(f"\n[2] CANDIDATE EXPERIMENTS IN BENCHMARK POOL (N={report.candidate_pool_size}):")
-    print(f"  {'ID':<12} {'Rank':<6} {'EIG (bits)':<12} {'Feas.':<8} {'Cost':<6} {'Utility':<10} {'Name'}")
-    print("  " + "-" * 78)
+    print(f"  {'ID':<12} {'Util. Rank':<12} {'EIG Rank':<10} {'EIG (bits)':<12} {'Feas.':<8} {'Cost':<6} {'Utility':<10} {'Name'}")
+    print("  " + "-" * 90)
     for c in report.candidate_experiments:
-        print(f"  {c['id']:<12} #{c['rank']:<5} {c['eig_bits']:<12.4f} {c['feasibility']*100:>5.0f}%  {c['cost']:<6.1f} {c['utility_score']:<10.4f} {c['name'][:32]}")
+        u_rank = f"#{c.get('utility_rank', c['rank'])}"
+        e_rank = f"#{c.get('eig_rank', c['rank'])}"
+        print(f"  {c['id']:<12} {u_rank:<12} {e_rank:<10} {c['eig_bits']:<12.4f} {c['feasibility']*100:>5.0f}%  {c['cost']:<6.1f} {c['utility_score']:<10.4f} {c['name'][:26]}")
+    print("  " + "-" * 90)
+    print("  * Ranking Divergence Note: EXP-WGS-03 has higher raw EIG (EIG Rank #3, 0.3775 bits) than EXP-WGS-04 (EIG Rank #4, 0.3233 bits),")
+    print("    but EXP-WGS-04 ranks higher in Composite Utility (Util Rank #3, 0.2797 vs Util Rank #4, 0.1601) due to synchrotron beamline")
+    print("    cost penalty (6.5 vs 1.1) and lower feasibility (70% vs 96%). Both metrics are reported separately.")
     
     print(f"\n[3] COMPARATIVE POLICY PERFORMANCE:")
     j = report.janus_policy

@@ -31,7 +31,9 @@ class PolicyMetrics(BaseModel):
     composite_utility: float
     cost_efficiency: float = Field(..., description="EIG per unit cost (bits / cost)")
     waste_rate: float = Field(..., description="Probability of selecting an uninformative assay (EIG < 0.01 bits)")
-    rank_in_pool: Optional[int] = Field(None, description="Rank within the candidate pool (1 is optimal)")
+    rank_in_pool: Optional[int] = Field(None, description="Primary composite utility rank within the candidate pool (1 is optimal)")
+    utility_rank: Optional[int] = Field(None, description="Deterministic rank ordered by composite utility")
+    eig_rank: Optional[int] = Field(None, description="Deterministic rank ordered strictly by raw Expected Information Gain")
 
 
 class ExactRandomBaseline(BaseModel):
@@ -152,7 +154,7 @@ def run_reproducible_benchmark(
     # 4. JANUS Optimal Policy (Top ranked candidate by composite utility)
     top_janus = quantified_scores[0]
     janus_metrics = PolicyMetrics(
-        policy_name="JANUS Utility Optimization",
+        policy_name="JANUS Composite Utility Optimization",
         selected_experiment_ids=[top_janus.experiment_id],
         selected_experiment_names=[top_janus.experiment_name],
         expected_information_gain=round(top_janus.expected_information_gain, 4),
@@ -161,7 +163,9 @@ def run_reproducible_benchmark(
         composite_utility=round(top_janus.composite_utility_score, 4),
         cost_efficiency=round(top_janus.expected_information_gain / top_janus.cost, 4) if top_janus.cost > 0 else 0.0,
         waste_rate=0.0,
-        rank_in_pool=1
+        rank_in_pool=1,
+        utility_rank=top_janus.utility_rank or 1,
+        eig_rank=top_janus.eig_rank or 1
     )
     
     # 5. Naive Cheapest-First Heuristic Policy
@@ -176,7 +180,9 @@ def run_reproducible_benchmark(
         composite_utility=round(cheapest_exp.composite_utility_score, 4),
         cost_efficiency=round(cheapest_exp.expected_information_gain / cheapest_exp.cost, 4) if cheapest_exp.cost > 0 else 0.0,
         waste_rate=1.0 if cheapest_exp.expected_information_gain < 0.01 else 0.0,
-        rank_in_pool=cheapest_exp.rank
+        rank_in_pool=cheapest_exp.rank,
+        utility_rank=cheapest_exp.utility_rank,
+        eig_rank=cheapest_exp.eig_rank
     )
     
     # 6. Naive Feasibility-First Heuristic Policy
@@ -191,7 +197,9 @@ def run_reproducible_benchmark(
         composite_utility=round(feasibility_exp.composite_utility_score, 4),
         cost_efficiency=round(feasibility_exp.expected_information_gain / feasibility_exp.cost, 4) if feasibility_exp.cost > 0 else 0.0,
         waste_rate=1.0 if feasibility_exp.expected_information_gain < 0.01 else 0.0,
-        rank_in_pool=feasibility_exp.rank
+        rank_in_pool=feasibility_exp.rank,
+        utility_rank=feasibility_exp.utility_rank,
+        eig_rank=feasibility_exp.eig_rank
     )
     
     # 7. Monte Carlo Simulation (Verification of Sampling Convergence)
@@ -239,6 +247,8 @@ def run_reproducible_benchmark(
             "cost": round(s.cost, 1),
             "utility_score": round(s.composite_utility_score, 4),
             "rank": s.rank,
+            "utility_rank": s.utility_rank,
+            "eig_rank": s.eig_rank,
             "is_informative": s.is_informative
         }
         for s in quantified_scores
@@ -248,17 +258,19 @@ def run_reproducible_benchmark(
     methodology_spec = {
         "experimental_unit": "A single candidate experiment selection decision (k=1 intervention) executed from the candidate pool.",
         "candidate_pool_definition": "Finite discrete population of N=5 peer-reviewed candidate assays for Pt/CeO2 WGS catalysis.",
+        "optimization_objective": "JANUS primary ranking optimizes Composite Utility U(e) = Feasibility * [EIG / (1 + alpha * Cost)]. On this candidate pool, EXP-WGS-02 ranks #1 under both Composite Utility (0.4171) and raw EIG (0.5593 bits). Pure EIG rank diverges for EXP-WGS-03 (EIG Rank #3, Utility Rank #4 due to high synchrotron cost of 6.5) and EXP-WGS-04 (EIG Rank #4, Utility Rank #3 due to high benchtop feasibility of 0.96 and low cost of 1.1).",
         "baseline_null_hypothesis": "The decision-maker has zero diagnostic information and selects uniformly at random with equal probability P(e_i) = 1/N = 0.20.",
         "analytical_method": "Closed-form population expectation and variance across all N=5 discrete outcomes (no Monte Carlo error).",
         "simulation_purpose": "Monte Carlo sampling (M=10,000 draws, seed=42) serves solely to empirically verify the law of large numbers convergence to the analytical mean.",
+        "deterministic_selection_clarification": "The 100% optimal-pick rate is a mathematical property of the deterministic argmax policy on this discrete 5-candidate pool; it is not an empirical real-world claim across uncharacterized experimental spaces.",
         "statistical_clarification": "The 20% random draw probability is the combinatorial chance of randomly picking the top assay (1/5); it is not an inferential hypothesis-test p-value."
     }
     
     # 10. Defensible Scientific Verdict
     verdict = (
-        f"On the verified Pt/CeO2 WGS candidate pool (N=5), JANUS selects 'EXP-WGS-02' "
-        f"(Transient H2(18O)/C(16O) Pulse), achieving an Expected Information Gain of {top_janus.expected_information_gain:.4f} bits "
-        f"and a composite utility of {top_janus.composite_utility_score:.4f}. "
+        f"On the verified Pt/CeO2 WGS candidate pool (N=5), JANUS optimizes composite utility and selects 'EXP-WGS-02' "
+        f"(Transient H2(18O)/C(16O) Pulse), achieving an Expected Information Gain of {top_janus.expected_information_gain:.4f} bits (EIG Rank #1) "
+        f"and a composite utility of {top_janus.composite_utility_score:.4f} (Utility Rank #1). "
         f"Compared to the exact analytical expectation of uniform random selection (mean EIG = {exact_mean_eig:.4f} bits, mean utility = {exact_mean_utility:.4f}), "
         f"JANUS achieves a {eig_improvement_ratio:.2f}x EIG multiplier (+{absolute_eig_gain:.4f} bits) and a {utility_improvement_ratio:.2f}x utility multiplier (+{absolute_utility_gain:.4f}). "
         f"Furthermore, JANUS guarantees zero waste (0.0% vs exact 20.0% probability under random selection of choosing the uninformative blank control EXP-WGS-06). "
@@ -301,7 +313,7 @@ def run_reproducible_benchmark(
             "exact_absolute_eig_gain_bits": round(absolute_eig_gain, 4),
             "exact_absolute_utility_gain": round(absolute_utility_gain, 4),
             "exact_waste_rate_reduction": f"{exact_baseline.exact_waste_rate*100:.1f}% -> {janus_metrics.waste_rate*100:.1f}%",
-            "optimal_selection_probability_comparison": f"JANUS: 100.0% vs. Random: {exact_baseline.probability_of_selecting_optimal*100:.1f}%",
+            "optimal_selection_probability_comparison": f"JANUS: 100.0% (deterministic argmax on this discrete 5-assay pool) vs. Random: {exact_baseline.probability_of_selecting_optimal*100:.1f}%",
             "cheapest_heuristic_failure": "Selects EXP-WGS-06 (cost=0.3, EIG=0.0 bits), wasting 100% of budget on uninformative control."
         },
         methodology_specification=methodology_spec,

@@ -58,6 +58,8 @@ export interface ExperimentScore {
   experiment_id: string;
   experiment_name: string;
   rank?: number | null;
+  utility_rank?: number | null;
+  eig_rank?: number | null;
   quantification_status?: 'QUANTIFIED_BAYESIAN' | 'UNQUANTIFIED_NEEDS_MEASUREMENT';
   prior_entropy: number;
   expected_posterior_entropy: number;

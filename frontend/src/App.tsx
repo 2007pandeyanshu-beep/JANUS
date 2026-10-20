@@ -303,7 +303,7 @@ export const App: React.FC = () => {
                     <p className="metric-highlight green" style={{ fontSize: '1.2rem' }}>
                       100% vs 20.0%
                     </p>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Combinatorial optimal pick probability</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Deterministic argmax on 5-candidate pool</span>
                   </div>
                 </div>
               </div>
@@ -418,14 +418,18 @@ export const App: React.FC = () => {
       {/* TAB 3: EXPERIMENT EXPLORER & RANKING */}
       {activeTab === 'experiments' && (
         <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '12px' }}>
-            Deterministically Quantified Experiments (Ranked by Utility)
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '6px' }}>
+            Deterministically Quantified Experiments (Dual Rank: Composite Utility vs Raw EIG)
           </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-subtle)', marginBottom: '12px' }}>
+            JANUS computes both <strong>Utility Rank</strong> (primary objective balancing EIG, feasibility, and cost) and <strong>EIG Rank</strong> (pure information gain).
+          </p>
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: '60px' }}>Rank</th>
+                  <th style={{ width: '80px' }}>Utility Rank</th>
+                  <th style={{ width: '80px' }}>EIG Rank</th>
                   <th>Candidate Experiment</th>
                   <th>EIG (Bits)</th>
                   <th>Disambiguation</th>
@@ -438,19 +442,34 @@ export const App: React.FC = () => {
               <tbody>
                 {analysisResult?.ranked_experiments.map(score => {
                   const isSelected = score.experiment_id === selectedExpId;
+                  const uRank = score.utility_rank ?? score.rank;
+                  const eRank = score.eig_rank ?? score.rank;
+                  const hasDivergence = uRank !== eRank;
                   return (
                     <tr 
                       key={score.experiment_id}
                       style={{ backgroundColor: isSelected ? '#f8fafc' : undefined }}
                     >
                       <td>
-                        <span className={`rank-pill rank-${score.rank}`}>
-                          {score.rank}
+                        <span className={`rank-pill rank-${uRank}`}>
+                          #{uRank}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge badge-slate" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                          #{eRank}
                         </span>
                       </td>
                       <td>
                         <strong style={{ display: 'block', color: 'var(--text-main)' }}>{score.experiment_name}</strong>
-                        <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{score.experiment_id}</span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                          <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{score.experiment_id}</span>
+                          {hasDivergence && (
+                            <span className="badge badge-amber" style={{ fontSize: '0.65rem', padding: '1px 5px' }}>
+                              EIG #{eRank} vs Util #{uRank}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <span className="metric-highlight">
@@ -500,6 +519,16 @@ export const App: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Ranking Divergence Callout */}
+          <div className="alert-box alert-blue" style={{ marginTop: '12px', fontSize: '0.82rem' }}>
+            <div>
+              <strong>Ranking Metric Transparency:</strong> JANUS's primary policy optimizes <strong>Composite Utility</strong> <em>U(e) = Feasibility × [EIG / (1 + α · Cost)]</em>.
+              <div style={{ marginTop: '4px', color: 'var(--text-subtle)' }}>
+                • <strong>Why EXP-WGS-04 (Util #3) outranks EXP-WGS-03 (Util #4):</strong> While Operando Ce L3-edge XAS provides <strong>0.3775 bits EIG (EIG Rank #3)</strong> compared to Kinetic Isotope Effect's <strong>0.3233 bits EIG (EIG Rank #4)</strong>, KIE has 96% feasibility and cost 1.1 (utility 0.2797), whereas Ce XAS requires synchrotron beamline access with cost 6.5 and feasibility 70% (utility 0.1601). Both metrics are preserved and reported without artificial numerical manipulation.
+              </div>
+            </div>
           </div>
 
           {/* Unquantified Proposals Section */}
@@ -571,7 +600,13 @@ export const App: React.FC = () => {
                 <div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
                     {selectedScore.rank ? (
-                      <span className="badge badge-indigo">RANK #{selectedScore.rank}</span>
+                      <>
+                        <span className="badge badge-indigo">UTILITY RANK #{selectedScore.utility_rank ?? selectedScore.rank} (PRIMARY)</span>
+                        <span className="badge badge-blue">EIG RANK #{selectedScore.eig_rank ?? selectedScore.rank}</span>
+                        {(selectedScore.utility_rank ?? selectedScore.rank) !== (selectedScore.eig_rank ?? selectedScore.rank) && (
+                          <span className="badge badge-amber">COST/FEASIBILITY DIVERGENCE</span>
+                        )}
+                      </>
                     ) : (
                       <span className="badge badge-slate">UNQUANTIFIED PROPOSAL</span>
                     )}
@@ -580,8 +615,9 @@ export const App: React.FC = () => {
                   <h3 className="card-title" style={{ fontSize: '1.15rem' }}>{selectedScore.experiment_name}</h3>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', display: 'block' }}>Expected Info Gain</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', display: 'block' }}>Expected Info Gain / Utility</span>
                   <span className="metric-highlight" style={{ fontSize: '1.25rem' }}>{selectedScore.expected_information_gain.toFixed(4)} bits</span>
+                  <span style={{ fontSize: '0.75rem', color: '#059669', display: 'block', fontWeight: 600 }}>Utility: {selectedScore.composite_utility_score.toFixed(4)}</span>
                 </div>
               </div>
 

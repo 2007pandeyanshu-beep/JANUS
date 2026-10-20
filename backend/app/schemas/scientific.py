@@ -140,7 +140,9 @@ class ExperimentScore(BaseModel):
     """Information-theoretic evaluation and ranking score for an experiment."""
     experiment_id: str
     experiment_name: str
-    rank: Optional[int] = Field(default=None, description="Deterministic rank (1 is most informative); None if unquantified")
+    rank: Optional[int] = Field(default=None, description="Primary composite utility rank (1 is most optimal); None if unquantified")
+    utility_rank: Optional[int] = Field(default=None, description="Deterministic rank ordered by composite utility (incorporating EIG, feasibility, and cost)")
+    eig_rank: Optional[int] = Field(default=None, description="Deterministic rank ordered strictly by raw Expected Information Gain in bits (ignoring cost and feasibility)")
     quantification_status: str = Field(
         default="QUANTIFIED_BAYESIAN",
         description="'QUANTIFIED_BAYESIAN' or 'UNQUANTIFIED_NEEDS_MEASUREMENT'"
