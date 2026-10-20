@@ -105,5 +105,6 @@ def test_case_study_api_endpoints():
     assert res_bench.status_code == 200
     bench_data = res_bench.json()
     assert bench_data["benchmark_id"] == "BENCH-WGS-001"
-    assert bench_data["janus_policy"]["expected_information_gain"] > bench_data["random_policy"]["mean_eig"]
-    assert bench_data["comparison_summary"]["eig_improvement_ratio"] > 1.3
+    assert bench_data["janus_policy"]["expected_information_gain"] > bench_data["exact_random_baseline"]["exact_mean_eig"]
+    assert bench_data["comparison_summary"]["exact_eig_multiplier"] > 1.3
+    assert bench_data["exact_random_baseline"]["exact_waste_rate"] == 0.20

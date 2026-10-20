@@ -182,11 +182,20 @@ def test_reproducible_benchmark_evaluation_properties():
 
     # Strict reproducibility across identical seeds
     assert report1.janus_policy.expected_information_gain == report2.janus_policy.expected_information_gain
-    assert report1.random_policy.mean_eig == report2.random_policy.mean_eig
+    assert report1.monte_carlo_verification.empirical_mean_eig == report2.monte_carlo_verification.empirical_mean_eig
 
-    # Verify JANUS outperforms random selection
-    assert report1.janus_policy.expected_information_gain > report1.random_policy.mean_eig
-    assert report1.comparison_summary["eig_improvement_ratio"] > 1.4
+    # Verify exact analytical population properties
+    assert pytest.approx(report1.exact_random_baseline.exact_mean_eig, 1e-4) == 0.3506
+    assert pytest.approx(report1.exact_random_baseline.exact_population_std_eig, 1e-4) == 0.1940
+    assert pytest.approx(report1.exact_random_baseline.exact_mean_utility, 1e-4) == 0.2503
+    assert report1.exact_random_baseline.exact_waste_rate == 0.20
+    assert report1.exact_random_baseline.probability_of_selecting_optimal == 0.20
+
+    # Verify JANUS exact calculations
+    assert pytest.approx(report1.janus_policy.expected_information_gain, 1e-4) == 0.5593
+    assert pytest.approx(report1.janus_policy.composite_utility, 1e-4) == 0.4171
+    assert pytest.approx(report1.comparison_summary["exact_eig_multiplier"], 1e-3) == 1.5950
+    assert pytest.approx(report1.comparison_summary["exact_utility_multiplier"], 1e-3) == 1.6665
 
     # Verify cheapest heuristic selects the 0-EIG quartz blank (EXP-WGS-06)
     assert report1.cheapest_heuristic_policy.selected_experiment_ids == ["EXP-WGS-06"]
