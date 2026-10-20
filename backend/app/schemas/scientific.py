@@ -20,6 +20,10 @@ class Evidence(BaseModel):
     source: str = Field(..., description="Citation, DOI, or repository URL")
     source_doi: Optional[str] = Field(default=None, description="Direct DOI string if available")
     source_location: Optional[str] = Field(default=None, description="Page, section, or figure in the cited source")
+    exact_source_quote: Optional[str] = Field(default=None, description="Direct excerpt or table quote from primary literature")
+    claim_status: Optional[str] = Field(default="VERIFIED_PRIMARY_SOURCE", description="Verification status")
+    claim_type: Optional[str] = Field(default="source_reported_value", description="Classification of claim")
+    ambiguity_notes: Optional[str] = Field(default=None, description="Scientific boundary conditions or ambiguities")
     provenance: str = Field(
         ...,
         description="Provenance level: 'empirical_observation', 'author_interpretation', 'computational_dft', 'synthetic_fixture', or 'unquantified_assumption'"
@@ -78,6 +82,10 @@ class PredictedOutcome(BaseModel):
         default=0.0,
         ge=0.0,
         description="Standard deviation or estimated variance in prediction"
+    )
+    derivation_mode: Optional[str] = Field(
+        default="derived_from_reported_value_with_noise_model",
+        description="Derivation: 'source_reported_frequency', 'derived_from_reported_value_with_noise_model', 'theoretical_null_control', or 'illustrative_synthetic'"
     )
     basis: Optional[str] = Field(
         default=None,

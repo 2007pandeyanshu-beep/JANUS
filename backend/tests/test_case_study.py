@@ -99,3 +99,11 @@ def test_case_study_api_endpoints():
     assert res_data["is_synthetic"] is False
     assert len(res_data["unquantified_experiments"]) >= 1
     assert len(res_data["ranked_experiments"]) >= 4
+
+    # Test benchmark evaluation endpoint
+    res_bench = client.get("/api/evaluation/benchmark?seed=42&samples=1000")
+    assert res_bench.status_code == 200
+    bench_data = res_bench.json()
+    assert bench_data["benchmark_id"] == "BENCH-WGS-001"
+    assert bench_data["janus_policy"]["expected_information_gain"] > bench_data["random_policy"]["mean_eig"]
+    assert bench_data["comparison_summary"]["eig_improvement_ratio"] > 1.3

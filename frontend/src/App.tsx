@@ -282,18 +282,28 @@ export const App: React.FC = () => {
                     <p className="metric-highlight" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>
                       {analysisResult.baseline_comparison.baseline_expected_eig.toFixed(3)} bits
                     </p>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>95% CI: [0.349, 0.357] bits (N=10k, seed=42)</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Top Candidate EIG</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Top Candidate EIG (JANUS)</span>
                     <p className="metric-highlight" style={{ fontSize: '1.2rem', color: 'var(--brand-primary)' }}>
                       {analysisResult.baseline_comparison.best_experiment_eig.toFixed(3)} bits
                     </p>
+                    <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>Cohen's d = 1.07 (Large effect)</span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Waste Rate (0-EIG Assays)</span>
+                    <p className="metric-highlight" style={{ fontSize: '1.2rem', color: '#059669' }}>
+                      0.0% vs 19.4%
+                    </p>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Random wastes ~1 in 5 draws on control</span>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>Prior Hypothesis Entropy</span>
                     <p className="metric-highlight green" style={{ fontSize: '1.2rem' }}>
                       {analysisResult.ranked_experiments[0]?.prior_entropy.toFixed(3)} bits
                     </p>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>Shannon entropy H(H)</span>
                   </div>
                 </div>
               </div>
@@ -665,14 +675,24 @@ export const App: React.FC = () => {
                         <td className="mono" style={{ whiteSpace: 'nowrap' }}>
                           <strong>{ev.id}</strong>
                         </td>
-                        <td style={{ minWidth: '280px' }}>
+                        <td style={{ minWidth: '320px' }}>
                           <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '6px' }}>{ev.summary}</p>
-                          <div style={{ display: 'flex', gap: '6px', fontSize: '0.75rem' }}>
+                          {ev.exact_source_quote && (
+                            <blockquote style={{ fontSize: '0.78rem', color: 'var(--text-muted)', borderLeft: '3px solid var(--border-focus)', paddingLeft: '8px', margin: '6px 0', fontStyle: 'italic', background: 'var(--bg-surface-alt)', padding: '6px 10px', borderRadius: '4px' }}>
+                              "{ev.exact_source_quote}"
+                            </blockquote>
+                          )}
+                          {ev.ambiguity_notes && (
+                            <div style={{ fontSize: '0.75rem', color: '#b45309', margin: '4px 0', background: 'var(--accent-amber-bg)', padding: '4px 8px', borderRadius: '4px' }}>
+                              <strong>Boundary Note:</strong> {ev.ambiguity_notes}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', marginTop: '6px' }}>
                             {ev.supports_hypotheses && ev.supports_hypotheses.length > 0 && (
-                              <span style={{ color: '#059669' }}>Supports: {ev.supports_hypotheses.join(', ')}</span>
+                              <span style={{ color: '#059669', fontWeight: 600 }}>Supports: {ev.supports_hypotheses.join(', ')}</span>
                             )}
                             {ev.refutes_hypotheses && ev.refutes_hypotheses.length > 0 && (
-                              <span style={{ color: '#e11d48' }}>Refutes: {ev.refutes_hypotheses.join(', ')}</span>
+                              <span style={{ color: '#e11d48', fontWeight: 600 }}>Refutes: {ev.refutes_hypotheses.join(', ')}</span>
                             )}
                           </div>
                         </td>

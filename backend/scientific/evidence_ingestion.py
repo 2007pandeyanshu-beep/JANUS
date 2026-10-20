@@ -53,6 +53,10 @@ def load_evidence_ledger() -> List[Evidence]:
             source=f"{item['source_citation']} (DOI: {item.get('source_doi', 'N/A')})",
             source_doi=item.get("source_doi"),
             source_location=item.get("source_location"),
+            exact_source_quote=item.get("exact_source_quote"),
+            claim_status=item.get("claim_status", "VERIFIED_PRIMARY_SOURCE"),
+            claim_type=item.get("claim_type", "source_reported_value"),
+            ambiguity_notes=item.get("ambiguity_notes"),
             provenance=item["provenance"],
             summary=item["statement"],
             quantitative_value=item.get("quantitative_value"),
@@ -83,6 +87,7 @@ def load_candidate_experiments() -> List[Experiment]:
                     hypothesis_id=p["hypothesis_id"],
                     probability=float(p["probability"]),
                     uncertainty=float(p.get("uncertainty", 0.0)),
+                    derivation_mode=p.get("derivation_mode", "derived_from_reported_value_with_noise_model"),
                     basis=p.get("basis")
                 )
             )

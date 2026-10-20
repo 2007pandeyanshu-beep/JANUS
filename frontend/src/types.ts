@@ -6,6 +6,9 @@ export interface Evidence {
   source: string;
   source_doi?: string;
   source_location?: string;
+  exact_source_quote?: string;
+  claim_status?: string;
+  ambiguity_notes?: string;
   provenance: string;
   summary: string;
   quantitative_value?: {

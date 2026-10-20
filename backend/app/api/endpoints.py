@@ -19,6 +19,7 @@ from scientific.evidence_ingestion import (
     load_candidate_experiments,
 )
 from scientific.validation import ScientificValidationError
+from evaluation.benchmark_evaluation import run_reproducible_benchmark, BenchmarkEvaluationReport
 
 router = APIRouter(prefix="/api", tags=["Scientific Intelligence"])
 
@@ -86,6 +87,21 @@ def get_candidates():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to load candidate experiments: {str(e)}"
+        )
+
+
+@router.get("/evaluation/benchmark", response_model=BenchmarkEvaluationReport)
+def get_benchmark_evaluation(seed: int = 42, samples: int = 10000):
+    """
+    Returns reproducible benchmark evaluation comparing JANUS against
+    Random Selection and Heuristic policies on CS-CAT-001.
+    """
+    try:
+        return run_reproducible_benchmark(seed=seed, monte_carlo_samples=samples)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Benchmark evaluation failed: {str(e)}"
         )
 
 
