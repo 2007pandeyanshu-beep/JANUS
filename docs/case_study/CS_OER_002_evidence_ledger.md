@@ -28,7 +28,7 @@ Hypothesis priors reflect the decision-maker's epistemic uncertainty before exec
 | **$H_1$** | Adsorbate Evolution Mechanism (AEM) | $0.35$ | **`ILLUSTRATIVE`** | Classical mechanistic framework for metal oxide electrocatalysis (Suntivich 2011). Serves as a standard baseline hypothesis. |
 | **$H_2$** | Lattice Oxygen-Mediated Mechanism (LOM) | $0.45$ | **`ILLUSTRATIVE`** | Strongly supported for highly covalent cobaltite perovskites ($\text{SrCoO}_{2.7}$, $\text{La}_{0.5}\text{Sr}_{0.5}\text{CoO}_{3-\delta}$) by OEMS isotopic data (Grimaud 2017; Mefford 2016). Assigned highest illustrative prior. |
 | **$H_3$** | Oxide Path / Surface Radical Coupling (OPM) | $0.20$ | **`ILLUSTRATIVE`** | Proposed by theoretical DFT models (Rong & Kolpak 2016) as an alternative route to bypass scaling without bulk lattice collapse. Skeptical prior reflects limited direct operando spectroscopic observation. |
-| **$H(P_0)$** | Initial Shannon Entropy | **$1.5087\text{ bits}$** | **`QUANTITATIVELY_DERIVED`** | Calculated directly via Shannon formula: $H(P_0) = -\sum_{k=1}^3 P(H_k) \log_2 P(H_k) = -[0.35 \log_2 0.35 + 0.45 \log_2 0.45 + 0.20 \log_2 0.20]$. |
+| **$H(P_0)$** | Initial Shannon Entropy | **$1.5129\text{ bits}$** | **`QUANTITATIVELY_DERIVED`** | Calculated directly via Shannon formula: $H(P_0) = -\sum_{k=1}^3 P(H_k) \log_2 P(H_k) = -[0.35 \log_2 0.35 + 0.45 \log_2 0.45 + 0.20 \log_2 0.20]$. |
 
 > [!NOTE]
 > **Priors are Epistemic States, Not Physical Constants:**
