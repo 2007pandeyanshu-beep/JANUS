@@ -166,15 +166,10 @@ def compute_bayesian_posterior_update(
         
     posterior = {h_id: float(p / marginal_p_y) for h_id, p in unnormalized.items()}
     
-    # Clean numerical normalization
+    # Exact IEEE-754 simplex normalization without lossy premature rounding
     total_post = sum(posterior.values())
     if total_post > 0:
-        posterior = {h_id: round(float(p / total_post), 6) for h_id, p in posterior.items()}
-        # Re-ensure exact sum to 1.0
-        drift = 1.0 - sum(posterior.values())
-        if abs(drift) > 0:
-            first_h = hypothesis_ids[0]
-            posterior[first_h] = round(posterior[first_h] + drift, 6)
+        posterior = {h_id: float(p / total_post) for h_id, p in posterior.items()}
             
     return posterior
 

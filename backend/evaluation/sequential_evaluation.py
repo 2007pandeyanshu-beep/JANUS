@@ -125,6 +125,22 @@ def run_sequential_policy_comparison(
     # 2. Compute comparative metrics and regret against Offline Combinatorial Optimal
     for policy_key, policy_display in POLICIES_TO_EVALUATE:
         res, elapsed_ms = campaign_results[policy_key]
+        
+        # Rigorous bound invariant check with documented floating-point tolerance (1e-6)
+        # Genuine bound violations fail immediately with complete diagnostic details
+        # rather than being silently masked by max(0.0, ...)
+        tolerance = 1e-6
+        excess = res.total_realized_information_gain - offline_ig
+        if excess > tolerance:
+            raise AssertionError(
+                f"OFFLINE COMBINATORIAL BOUND INVARIANT VIOLATION: Policy '{policy_key}' achieved "
+                f"realized IG = {res.total_realized_information_gain:.6f} bits, which exceeds the "
+                f"Offline Combinatorial Upper Bound = {offline_ig:.6f} bits by {excess:.6f} bits "
+                f"(tolerance = {tolerance:.1e}). "
+                f"Campaign: scenario='{scenario.scenario_name}', seed={seed}, "
+                f"hidden_h='{hidden_hypothesis_id}', budget={budget:.1f}."
+            )
+            
         regret_vs_offline = max(offline_ig - res.total_realized_information_gain, 0.0)
         signed_delta = privileged_realized_ig - res.total_realized_information_gain
         top_hypo = max(res.final_posterior, key=res.final_posterior.get) if res.final_posterior else None

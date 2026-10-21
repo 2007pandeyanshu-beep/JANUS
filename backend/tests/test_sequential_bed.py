@@ -591,3 +591,61 @@ def test_held_out_robustness_suite_structure():
     assert "budget_sweep" in res
     assert "threshold_sweep" in res
     assert "stress_tests" in res
+
+
+def test_offline_bound_invariant_across_all_synthetic_scenarios():
+    """
+    Release Gate Verification:
+    Asserts that the True Offline Combinatorial Upper Bound strictly bounds EVERY
+    sequential policy across all 6 synthetic scenarios (SYNTH-A to F) and the primary
+    case study across multiple seeds, guaranteeing non-negative regret without masking.
+    """
+    from scientific.synthetic_scenarios import SYNTHETIC_SCENARIO_GENERATORS, get_synthetic_scenario
+    
+    test_scenarios = [("CS-CAT-001", get_wgs_case_study_scenario())]
+    for key in SYNTHETIC_SCENARIO_GENERATORS:
+        test_scenarios.append((key, get_synthetic_scenario(key, seed=42)))
+        
+    for s_name, scen in test_scenarios:
+        for test_seed in [1, 2, 42, 101]:
+            report = run_sequential_policy_comparison(
+                scenario=scen,
+                hidden_hypothesis_id=scen.hypotheses[0].id,
+                seed=test_seed,
+                budget=10.0
+            )
+            bound = report.offline_optimal_ig_bits
+            for s in report.policy_summaries:
+                assert s.total_realized_ig_bits <= bound + 1e-6, (
+                    f"Invariant violated in {s_name} (seed {test_seed}): "
+                    f"policy {s.policy_key} achieved {s.total_realized_ig_bits} > bound {bound}"
+                )
+                assert s.regret_vs_offline_optimal >= 0.0
+
+
+def test_offline_bound_assertion_raises_on_violation():
+    """
+    Release Gate Verification:
+    Verifies that if a policy achieves realized IG exceeding the offline bound,
+    run_sequential_policy_comparison raises an explicit AssertionError with full
+    diagnostic details rather than silently masking the violation as zero regret.
+    """
+    import evaluation.sequential_evaluation as seq_eval
+    
+    scenario = get_wgs_case_study_scenario()
+    real_run = seq_eval.SequentialBEDEngine.run_campaign
+    
+    def corrupt_run(scen, inp):
+        res = real_run(scen, inp)
+        if inp.policy == "janus_utility":
+            res.total_realized_information_gain = 99.0  # Artificial violation
+        return res
+        
+    seq_eval.SequentialBEDEngine.run_campaign = corrupt_run
+    try:
+        with pytest.raises(AssertionError) as exc_info:
+            seq_eval.run_sequential_policy_comparison(scenario, "H1", seed=42, budget=10.0)
+        assert "OFFLINE COMBINATORIAL BOUND INVARIANT VIOLATION" in str(exc_info.value)
+        assert "janus_utility" in str(exc_info.value)
+    finally:
+        seq_eval.SequentialBEDEngine.run_campaign = real_run
