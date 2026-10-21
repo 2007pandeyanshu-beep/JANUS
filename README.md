@@ -48,7 +48,7 @@ JANUS/
 │   │   ├── sequential_evaluation.py # Multi-seed campaigns, paired permutation tests, CIs
 │   │   ├── benchmark_evaluation.py  # Single-step analytical benchmark evaluation
 │   │   └── baselines.py             # Random selection baseline
-│   ├── tests/                       # Pytest automated test suite (60 tests passing)
+│   ├── tests/                       # Pytest automated test suite (62 tests passing)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -95,9 +95,13 @@ cd C:\Users\2007p\OneDrive\Desktop\JANUS
 # (Optional) Install dependencies if setting up in fresh environment:
 pip install -r backend/requirements.txt
 
-# Run the complete automated test suite (60 tests passing):
+# Run the complete automated test suite (62 tests passing):
 pytest backend/tests -v
 ```
+
+> [!TIP]
+> **Complete Reproducibility Guide:**  
+> For full system specifications, pinned dependency matrices, seed routing, exact metric reproduction tables, and epistemological parameter classifications, consult the canonical [Reproducibility Guide](file:///C:/Users/2007p/OneDrive/Desktop/JANUS/docs/REPRODUCIBILITY.md).
 
 ### 2. Run the Benchmark Evaluations
 
