@@ -41,6 +41,14 @@ class Evidence(BaseModel):
         le=1.0,
         description="Confidence score for this evidence item (0.0 to 1.0)"
     )
+    doi_verification_status: Optional[str] = Field(
+        default=None,
+        description="Status of Crossref DOI metadata lookup: 'BIBLIOGRAPHIC_VERIFIED_ONLINE', 'METADATA_MISMATCH', 'DOI_NOT_FOUND', 'BIBLIOGRAPHIC_CACHED_OFFLINE', 'UNAVAILABLE'"
+    )
+    bibliographic_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Verified bibliographic metadata (journal, year, authors, title, URL, mismatch_details)"
+    )
 
 
 class Hypothesis(BaseModel):
@@ -231,6 +239,10 @@ class AnalysisResult(BaseModel):
     validation_status: str = Field(
         default="VALIDATED_DETERMINISTIC",
         description="Status flag indicating mathematical and schema verification"
+    )
+    independent_verification: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Independent mathematical invariant verification report"
     )
 
 

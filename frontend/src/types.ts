@@ -197,3 +197,77 @@ export interface BEDPolicyComparisonReport {
   policy_summaries: PolicyCampaignSummary[];
   summary_verdict: string;
 }
+
+// ==============================================================================
+// Multi-Agent Scientific Investigation Schemas (Phase 8)
+// ==============================================================================
+
+export type AgentRole = 'RESEARCH_AGENT' | 'HYPOTHESIS_AGENT' | 'SCIENTIFIC_TOOL_AGENT' | 'EXPERIMENT_STRATEGY_AGENT' | 'CRITIC_AGENT';
+
+export type CriticSeverity = 'VERIFIED' | 'NOTE' | 'WARNING' | 'HIGH_SEVERITY_CHALLENGE' | 'UNRESOLVED_DISAGREEMENT';
+
+export interface CriticItem {
+  id: string;
+  agent_targeted: AgentRole;
+  target_claim_or_object: string;
+  severity: CriticSeverity;
+  critique: string;
+  evidence_basis: string;
+  recommendation: string;
+  is_resolved: boolean;
+}
+
+export interface ToolExecutionRecord {
+  tool_name: string;
+  invoked_by: AgentRole;
+  input_arguments: Record<string, any>;
+  output_data: Record<string, any>;
+  execution_time_ms: number;
+  status: string;
+  provenance: string;
+}
+
+export interface AgentLogEntry {
+  timestamp: string;
+  role: AgentRole;
+  stage: string;
+  thought: string;
+  action_taken: string;
+  tool_name?: string | null;
+  output_summary?: string | null;
+}
+
+export interface InvestigationInput {
+  question: string;
+  mode: 'deterministic_offline_demo' | 'live_agent_loop';
+  case_study_id?: string | null;
+  api_key?: string | null;
+}
+
+export interface AgentInvestigationReport {
+  investigation_id: string;
+  question: string;
+  mode: string;
+  status: string;
+  case_study_id?: string | null;
+  retrieved_evidence: Evidence[];
+  hypotheses: Hypothesis[];
+  candidate_experiments: Experiment[];
+  analysis_result?: AnalysisResult | null;
+  tool_executions: ToolExecutionRecord[];
+  critic_review: CriticItem[];
+  agent_logs: AgentLogEntry[];
+  synthesis_summary: string;
+  human_approval_required?: string | null;
+  initial_priors?: Record<string, number>;
+  executed_observations?: Array<{
+    experiment_id: string;
+    experiment_name?: string;
+    observed_outcome: string;
+    cost?: string;
+    timestamp?: string;
+    status: string;
+  }>;
+  retired_experiments?: string[];
+  remaining_budget?: number;
+}

@@ -6,6 +6,8 @@ import {
   BEDCampaignInput,
   BEDCampaignResult,
   BEDPolicyComparisonReport,
+  InvestigationInput,
+  AgentInvestigationReport,
 } from './types';
 
 const API_BASE = '/api';
@@ -35,6 +37,14 @@ export async function fetchCaseStudyScenario(): Promise<AnalysisInput> {
   const res = await fetch(`${API_BASE}/scenarios/case-study`);
   if (!res.ok) {
     throw new Error(`Failed to load published case study (${res.status} ${res.statusText})`);
+  }
+  return res.json();
+}
+
+export async function fetchOerScenario(): Promise<AnalysisInput> {
+  const res = await fetch(`${API_BASE}/scenarios/oer`);
+  if (!res.ok) {
+    throw new Error(`Failed to load OER case study (${res.status} ${res.statusText})`);
   }
   return res.json();
 }
@@ -106,6 +116,50 @@ export async function compareSequentialPolicies(
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(errorData.detail || `Policy comparison failed with HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function startAgentInvestigation(payload: InvestigationInput): Promise<AgentInvestigationReport> {
+  const res = await fetch(`${API_BASE}/agents/investigate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Agent investigation failed with HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getAgentInvestigation(id: string): Promise<AgentInvestigationReport> {
+  const res = await fetch(`${API_BASE}/agents/investigation/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load investigation (${res.status} ${res.statusText})`);
+  }
+  return res.json();
+}
+
+export async function supplyAgentObservation(
+  investigationId: string,
+  experimentId: string,
+  observedOutcome: string
+): Promise<AgentInvestigationReport> {
+  const res = await fetch(`${API_BASE}/agents/investigation/${encodeURIComponent(investigationId)}/evidence`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ experiment_id: experimentId, observed_outcome: observedOutcome }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Evidence submission failed with HTTP ${res.status}`);
   }
   return res.json();
 }

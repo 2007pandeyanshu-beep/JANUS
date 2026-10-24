@@ -14,6 +14,10 @@ import {
   BEDCampaignResult,
   BEDPolicyComparisonReport,
 } from './types';
+import { DecisionWorkbench } from './components/DecisionWorkbench';
+import { AgentInvestigation } from './components/AgentInvestigation';
+import { LandingPage } from './components/LandingPage';
+import { JanusBrand } from './components/JanusBrand';
 
 export const App: React.FC = () => {
   const [health, setHealth] = useState<{
@@ -28,7 +32,8 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [running, setRunning] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'hypotheses' | 'experiments' | 'evidence' | 'audit' | 'sequential'>('overview');
+  const [activeTab, setActiveTab] = useState<'landing' | 'agents' | 'workbench' | 'overview' | 'hypotheses' | 'experiments' | 'evidence' | 'audit' | 'sequential'>('landing');
+  const [investigationPreset, setInvestigationPreset] = useState<'CS-CAT-001' | 'CS-OER-002' | 'SYN-001'>('CS-CAT-001');
   const [selectedExpId, setSelectedExpId] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<'case_study' | 'synthetic'>('case_study');
 
@@ -158,6 +163,12 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleStartInvestigation = (preset: 'CS-CAT-001' | 'CS-OER-002' | 'SYN-001' = 'CS-CAT-001') => {
+    setInvestigationPreset(preset);
+    setActiveTab('agents');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (loading) {
     return (
       <div className="app-container" style={{ textAlign: 'center', paddingTop: '100px' }}>
@@ -181,11 +192,7 @@ export const App: React.FC = () => {
       {/* Top Header */}
       <header className="app-header">
         <div className="brand-section">
-          <div className="brand-badge">JANUS</div>
-          <div className="brand-title">
-            <h1>Scientific Intelligence Core</h1>
-            <p>Discriminative Experiment Selection for Competing Scientific Hypotheses</p>
-          </div>
+          <JanusBrand size="md" />
         </div>
 
         <div className="header-status">
@@ -199,12 +206,12 @@ export const App: React.FC = () => {
           )}
 
           {isRealCaseStudy ? (
-            <span className="badge badge-emerald">PUBLISHED PRIMARY EVIDENCE (CS-CAT-001)</span>
+            <span className="badge badge-emerald">PUBLISHED EVIDENCE (CS-CAT-001)</span>
           ) : (
             <span className="badge badge-amber">SYNTHETIC BENCHMARK</span>
           )}
 
-          <span className="badge badge-indigo">PHASE 2 CASE STUDY</span>
+          <span className="badge badge-teal">AI FOR DECISIVE EXPERIMENTS</span>
         </div>
       </header>
 
@@ -215,55 +222,29 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Scenario Mode Switcher Bar */}
-      <div className="scenario-switcher-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <strong style={{ fontSize: '0.875rem' }}>Select Scenario Mode:</strong>
-          <div className="switcher-pills">
-            <button
-              className={`switcher-btn ${selectedMode === 'case_study' ? 'active real' : ''}`}
-              onClick={() => handleSwitchMode('case_study')}
-              disabled={running}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
-              Published Case Study: Pt/CeO2 WGS Catalysis
-            </button>
-            <button
-              className={`switcher-btn ${selectedMode === 'synthetic' ? 'active demo' : ''}`}
-              onClick={() => handleSwitchMode('synthetic')}
-              disabled={running}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }}></span>
-              Synthetic Benchmark: Kinase Signaling Pathway
-            </button>
-          </div>
-        </div>
-
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-          {isRealCaseStudy ? (
-            <span>Peer-reviewed empirical data from <em>J. Catal.</em> & <em>Science</em></span>
-          ) : (
-            <span>Illustrative benchmark fixture for algorithmic testing</span>
-          )}
-        </div>
-      </div>
-
-      {/* Mission / Context Banner */}
-      <div className={`mission-banner ${isRealCaseStudy ? 'case-study-mode' : ''}`}>
-        <h2>
-          {isRealCaseStudy
-            ? 'Heterogeneous Catalysis Case Study: Pt/CeO2 Water-Gas Shift Mechanism'
-            : 'Discriminative Selection Engine (Synthetic Demonstration)'}
-        </h2>
-        <p>
-          {isRealCaseStudy
-            ? 'Disambiguating whether low-temperature WGS on Pt/CeO2 proceeds via a Redox (Mars-van Krevelen) mechanism, an Associative Formate pathway, or an Associative Carboxyl pathway with formates as spectators. JANUS computes Expected Information Gain (EIG in bits) using published isotopic kinetic data and operando spectroscopy detection limits.'
-            : 'JANUS calculates Shannon entropy reduction to identify the exact assays that maximally distinguish competing scientific hypotheses under budget and feasibility constraints.'}
-        </p>
-      </div>
-
       {/* Navigation Tabs */}
       <nav className="tabs-nav">
+        <button 
+          className={`tab-btn ${activeTab === 'landing' ? 'active' : ''}`}
+          onClick={() => setActiveTab('landing')}
+          style={{ fontWeight: 700 }}
+        >
+          🌟 Product Overview
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'agents' ? 'active' : ''}`}
+          onClick={() => setActiveTab('agents')}
+          style={{ fontWeight: 800, color: activeTab === 'agents' ? 'var(--janus-navy)' : '#059669' }}
+        >
+          🚀 AI Guided Investigation (Demo)
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'workbench' ? 'active' : ''}`}
+          onClick={() => setActiveTab('workbench')}
+          style={{ fontWeight: 700 }}
+        >
+          🔬 Decision Workbench
+        </button>
         <button 
           className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
@@ -274,55 +255,115 @@ export const App: React.FC = () => {
           className={`tab-btn ${activeTab === 'hypotheses' ? 'active' : ''}`}
           onClick={() => setActiveTab('hypotheses')}
         >
-          2. Competing Hypotheses ({currentScenario?.hypotheses.length || 0})
+          2. Hypotheses ({currentScenario?.hypotheses.length || 0})
         </button>
         <button 
           className={`tab-btn ${activeTab === 'experiments' ? 'active' : ''}`}
           onClick={() => setActiveTab('experiments')}
         >
-          3. Experiment Explorer & Ranking ({analysisResult?.ranked_experiments.length || 0})
+          3. Experiment Explorer ({analysisResult?.ranked_experiments.length || 0})
         </button>
         <button 
           className={`tab-btn ${activeTab === 'evidence' ? 'active' : ''}`}
           onClick={() => setActiveTab('evidence')}
         >
-          4. Evidence Ledger & Claims ({currentScenario?.evidence.length || 0})
+          4. Evidence Ledger ({currentScenario?.evidence.length || 0})
         </button>
         <button 
           className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
           onClick={() => setActiveTab('audit')}
         >
-          5. Mathematical Audit Trail
+          5. Audit Trail
         </button>
         <button 
           className={`tab-btn ${activeTab === 'sequential' ? 'active' : ''}`}
           onClick={() => setActiveTab('sequential')}
         >
-          6. Sequential BED Campaign ⚡
+          6. Sequential BED ⚡
         </button>
       </nav>
 
-      {/* Control Action Bar */}
-      <div className="control-bar">
-        <div className="scenario-indicator">
-          <strong>Active Scenario:</strong>
-          <span>{currentScenario?.scenario_name}</span>
-          {isRealCaseStudy ? (
-            <span className="badge badge-emerald" style={{ fontSize: '0.65rem' }}>EVIDENCE-GROUNDED</span>
-          ) : (
-            <span className="badge badge-amber" style={{ fontSize: '0.65rem' }}>ILLUSTRATIVE VALUES</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            className={`btn-primary ${isRealCaseStudy ? 'emerald' : ''}`} 
-            onClick={handleRunAnalysis} 
-            disabled={running}
-          >
-            {running ? 'Computing Information Gain...' : '▶ Recompute Deterministic Ranking'}
-          </button>
-        </div>
-      </div>
+      {/* Scenario Mode Switcher Bar (Visible for in-depth benchmark tabs) */}
+      {activeTab !== 'landing' && activeTab !== 'agents' && activeTab !== 'workbench' && (
+        <>
+          <div className="scenario-switcher-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <strong style={{ fontSize: '0.875rem' }}>Select Scenario Mode:</strong>
+              <div className="switcher-pills">
+                <button
+                  className={`switcher-btn ${selectedMode === 'case_study' ? 'active real' : ''}`}
+                  onClick={() => handleSwitchMode('case_study')}
+                  disabled={running}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
+                  Published Case Study: Pt/CeO2 WGS Catalysis
+                </button>
+                <button
+                  className={`switcher-btn ${selectedMode === 'synthetic' ? 'active demo' : ''}`}
+                  onClick={() => handleSwitchMode('synthetic')}
+                  disabled={running}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }}></span>
+                  Synthetic Benchmark: Kinase Signaling Pathway
+                </button>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+              {isRealCaseStudy ? (
+                <span>Peer-reviewed empirical data from <em>J. Catal.</em> & <em>Science</em></span>
+              ) : (
+                <span>Illustrative benchmark fixture for algorithmic testing</span>
+              )}
+            </div>
+          </div>
+
+          <div className={`mission-banner ${isRealCaseStudy ? 'case-study-mode' : ''}`}>
+            <h2>
+              {isRealCaseStudy
+                ? 'Heterogeneous Catalysis Case Study: Pt/CeO2 Water-Gas Shift Mechanism'
+                : 'Discriminative Selection Engine (Synthetic Demonstration)'}
+            </h2>
+            <p>
+              {isRealCaseStudy
+                ? 'Disambiguating whether low-temperature WGS on Pt/CeO2 proceeds via a Redox (Mars-van Krevelen) mechanism, an Associative Formate pathway, or an Associative Carboxyl pathway with formates as spectators.'
+                : 'JANUS calculates Shannon entropy reduction to identify the exact assays that maximally distinguish competing scientific hypotheses under budget and feasibility constraints.'}
+            </p>
+          </div>
+
+          <div className="control-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--janus-surface)', padding: '12px 18px', borderRadius: '8px', border: '1px solid var(--janus-border)', marginBottom: '20px' }}>
+            <div className="scenario-indicator">
+              <strong>Active Scenario: </strong>
+              <span>{currentScenario?.scenario_name}</span>
+            </div>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleRunAnalysis} 
+              disabled={running}
+            >
+              {running ? 'Computing Information Gain...' : '▶ Recompute Deterministic Ranking'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* TAB: PRODUCT LANDING PAGE */}
+      {activeTab === 'landing' && (
+        <LandingPage onStartInvestigation={handleStartInvestigation} />
+      )}
+
+      {/* TAB: AGENTIC SCIENTIFIC INVESTIGATION WORKBENCH */}
+      {activeTab === 'agents' && (
+        <AgentInvestigation 
+          initialPreset={investigationPreset} 
+          onBackToLanding={() => setActiveTab('landing')} 
+        />
+      )}
+
+      {/* TAB: SCIENTIFIC DECISION WORKBENCH */}
+      {activeTab === 'workbench' && (
+        <DecisionWorkbench />
+      )}
 
       {/* TAB 1: OVERVIEW & BASELINE */}
       {activeTab === 'overview' && (

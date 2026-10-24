@@ -45,6 +45,8 @@ dist-ssr/
 .env
 .env.*
 !.env.example
+private_keys.json
+*.key
 
 # IDE & Editor caches
 .vscode/*
@@ -78,6 +80,9 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
+*_data.json
 
 # Temporary & intermediate files
 tmp/
